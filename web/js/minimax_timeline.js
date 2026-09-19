@@ -1,6 +1,16 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import {
+    bindSegmentLoraEvents,
+    normalizeLoraRows,
+    bindSegmentLoraRefs,
+    ensureSegmentLoraStyles,
+    renderSegmentLoras,
+    segmentLoraTemplate,
+} from "./minimax_segment_loras.js";
+import { mountPromptLibraryBar } from "./minimax_prompt_library.js";
+import "./minimax_rerun.js";
+import {
     CUSTOM_ASPECT_RATIO,
     DEFAULT_ASPECT_RATIO,
     DEFAULT_MEGAPIXELS,
@@ -501,6 +511,11 @@ const DIRECTOR_WIDGET_LABEL_KEYS = {
     clear_vram_between_segments: "widget.clearVram",
     clear_vram_before_refine: "widget.clearVramBeforeRefine",
     clear_vram_before_face_refine: "widget.clearVramBeforeFaceRefine",
+    clear_ram_between_segments: "widget.clearRam",
+    offload_segments_to_disk: "widget.offloadDisk",
+    save_group_videos: "widget.saveGroupVideos",
+    rerun_when_done: "widget.rerunWhenDone",
+    rerun_after_seconds: "widget.rerunAfterSeconds",
     export_source_images: "widget.exportSourceImages",
     export_pre_face_refine: "widget.exportPreFaceRefine",
     control_after_generate: "widget.controlAfterGenerate",
@@ -511,6 +526,11 @@ const DIRECTOR_WIDGET_TOOLTIP_KEYS = {
     clear_vram_between_segments: "widget.tooltip.clearVram",
     clear_vram_before_refine: "widget.tooltip.clearVramBeforeRefine",
     clear_vram_before_face_refine: "widget.tooltip.clearVramBeforeFaceRefine",
+    clear_ram_between_segments: "widget.tooltip.clearRam",
+    offload_segments_to_disk: "widget.tooltip.offloadDisk",
+    save_group_videos: "widget.tooltip.saveGroupVideos",
+    rerun_when_done: "widget.tooltip.rerunWhenDone",
+    rerun_after_seconds: "widget.tooltip.rerunAfterSeconds",
     export_source_images: "widget.tooltip.exportSourceImages",
     export_pre_face_refine: "widget.tooltip.exportPreFaceRefine",
 };
@@ -1653,6 +1673,11 @@ const PERF_WIDGET_ORDER = [
     "clear_vram_between_segments",
     "clear_vram_before_refine",
     "clear_vram_before_face_refine",
+    "clear_ram_between_segments",
+    "offload_segments_to_disk",
+    "save_group_videos",
+    "rerun_when_done",
+    "rerun_after_seconds",
 ];
 
 function moveDirectorPerfWidgetsBeforeTimeline(node) {
@@ -2316,6 +2341,8 @@ class MiniMaxH3DirectorEditor {
                     id: matched?.id,
                     durationSec: spec.durationSec ?? defaultDurationSec("fl2v"),
                     prompt,
+                    // Group nodes carry no LoRA stack; keep the Director's own.
+                    loras: matched?.loras,
                     externalNodeId: spec.nodeId ?? null,
                     // External graph is source of truth for media previews.
                     startImage: imageRefFromPath(spec.firstImageFile),
@@ -2648,6 +2675,9 @@ class MiniMaxH3DirectorEditor {
                         // Persist per-segment「引用上段」(default true when unset).
                         continuityFromPrev: isSegmentContinuityFromPrev(clean, i),
                         refImageSize: resolveSegmentRefImageSize(clean, this.timeline.output),
+                        // Per-segment LoRA stack; the payload is a whitelist, so it
+                        // has to be carried explicitly or the backend never sees it.
+                        loras: normalizeLoraRows(clean.loras),
                     };
                 }),
                 ...this._runSelectionPayload(),
@@ -3132,7 +3162,7 @@ class MiniMaxH3DirectorEditor {
                 <div class="bd-gen-fc-row hidden" data-r="gen-seg-fc-row">
                     <span class="bd-label" data-i18n="panel.segmentFrames">片段帧数</span>
                     <input type="number" class="bd-num" data-r="gen-seg-fc" min="1" max="${MAX_GEN_FRAMES}" value="124" style="width:72px">
-                </div>
+                </div>${segmentLoraTemplate()}
             </div>`;
         this.mainBody.appendChild(bottom);
 
@@ -3152,6 +3182,8 @@ class MiniMaxH3DirectorEditor {
             this.fl2vUi.totalInput = this.root.querySelector('[data-r="fl2v-total"]');
         }
         bindFl2vEvents(this);
+        // Prompt library bar: sits above the group toolbar of whichever panel is showing.
+        mountPromptLibraryBar(this);
 
         const runStatus = document.createElement("div");
         runStatus.className = "bd-run-status idle";
@@ -3245,6 +3277,9 @@ class MiniMaxH3DirectorEditor {
         this.segPrompt = this.root.querySelector('[data-r="seg-prompt"]');
         this.segNegative = this.root.querySelector('[data-r="seg-negative"]');
         this.segRefsBox = this.root.querySelector('[data-r="seg-refs"]');
+        ensureSegmentLoraStyles();
+        bindSegmentLoraRefs(this);
+        bindSegmentLoraEvents(this);
         this.globalRefsCol = this.root.querySelector('[data-r="global-refs-col"]');
         this.segRefsCol = this.root.querySelector('[data-r="seg-refs-col"]');
         this.globalRefVideoCol = this.root.querySelector('[data-r="global-ref-video-col"]');
@@ -10795,6 +10830,7 @@ class MiniMaxH3DirectorEditor {
             const fc = liveSeg.frameCount ?? liveSeg.length ?? defaultFrameCount(this.getTaskKey(), this.getFrameRate());
             if (this.genSegFc) this.genSegFc.value = fc;
         }
+        renderSegmentLoras(this, liveSeg);
         if (this.isFl2vMode()) updateFl2vDetailUI(this);
     }
 

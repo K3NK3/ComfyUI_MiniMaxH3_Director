@@ -285,6 +285,9 @@ class MiniMaxH3Director:
         clear_vram_before_face_refine=False,
         export_source_images=False,
         export_pre_face_refine=False,
+        clear_ram_between_segments=False,
+        offload_segments_to_disk=False,
+        save_group_videos=False,
         **kwargs,
     ):
         del kwargs
@@ -327,6 +330,9 @@ class MiniMaxH3Director:
                     clear_vram_before_refine=clear_vram_before_refine,
                     clear_vram_before_face_refine=clear_vram_before_face_refine,
                     export_pre_face_refine=export_pre_face_refine,
+                    clear_ram_between_segments=clear_ram_between_segments,
+                    offload_segments_to_disk=offload_segments_to_disk,
+                    save_group_videos=save_group_videos,
                 )
             )
 
