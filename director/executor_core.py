@@ -1361,7 +1361,7 @@ def execute_director_plan_core(
             )
         elif selflift_will_run(plan, seg):
             samples, low_carry = sample_selflift_stage(
-                model=model,
+                model=seg_model,  # per-segment LoRA
                 positive=positive,
                 negative=negative,
                 latent=latent,
