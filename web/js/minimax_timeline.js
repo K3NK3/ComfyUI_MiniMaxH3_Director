@@ -2946,6 +2946,11 @@ class MiniMaxH3DirectorEditor {
                 <input type="number" class="bd-num" data-r="out-w" min="32" max="8192" step="32" value="864" style="width:56px">
                 <label data-i18n="output.height">高</label>
                 <input type="number" class="bd-num" data-r="out-h" min="32" max="8192" step="32" value="480" style="width:56px">
+                <label style="display:inline-flex;flex-direction:column;align-items:center;gap:0;margin-left:4px;font-size:6px;line-height:1.1;cursor:pointer" title="Auto height from aspect ratio">
+                    <input type="checkbox" data-r="out-h-auto" style="width:12px;height:12px;margin:0 0 4px 0">
+                    <span>AUTO</span>
+                    <span>HEIGHT</span>
+                </label>
             </span>
             <select class="bd-select hidden" data-r="out-mode" data-i18n-title="tooltip.outputMode">
                 <option value="long_edge" data-i18n="output.mode.longEdge">最长边缩放</option>
@@ -3311,6 +3316,7 @@ class MiniMaxH3DirectorEditor {
         this.outLong = this.root.querySelector('[data-r="out-long"]');
         this.outW = this.root.querySelector('[data-r="out-w"]');
         this.outH = this.root.querySelector('[data-r="out-h"]');
+        this.outHAuto = this.root.querySelector('[data-r="out-h-auto"]');
         this.fpsInput = this.root.querySelector('[data-r="timeline-fps"]');
         this.outAudioWrap = this.root.querySelector('[data-r="out-audio-wrap"]');
         this.outAudioMode = this.root.querySelector('[data-r="out-audio-mode"]');
@@ -3558,7 +3564,41 @@ class MiniMaxH3DirectorEditor {
 
         this.outMode.onchange = () => this.onOutputField("mode", this.outMode.value);
         if (this.outAspect) {
-            this.outAspect.onchange = () => this.onOutputField("aspectRatio", this.outAspect.value);
+            this.outAspect.onchange = () => {
+                this.onOutputField("aspectRatio", this.outAspect.value);
+                // When switching to Custom, set default width of 720
+                if (isCustomAspectRatio(this.outAspect.value)) {
+                    this.outW.value = "720";
+                    // If auto height is enabled, calculate height from input media
+                    if (this.outHAuto?.checked) {
+                        let src = this.getSourceDimensions();
+                        if (src.width === 0 && src.height === 0) {
+                            src = this.getI2iSourceDimensions?.() || { width: 0, height: 0 };
+                        }
+                        if (src.width > 0 && src.height > 0) {
+                            const h = Math.round(720 * (src.height / src.width));
+                            this.outH.value = String(h);
+                            this.applyCustomResolution(720, h);
+                            return;
+                        }
+                    }
+                    // Otherwise just apply the default width
+                    this.applyCustomResolution(720, null);
+                    return;
+                }
+                // When aspect ratio changes, recalculate height if auto is enabled
+                if (this.outHAuto?.checked && !isCustomAspectRatio(this.outAspect.value)) {
+                    let src = this.getSourceDimensions();
+                    if (src.width === 0 && src.height === 0) {
+                        src = this.getI2iSourceDimensions?.() || { width: 0, height: 0 };
+                    }
+                    if (src.width > 0 && src.height > 0) {
+                        const w = +this.outW.value;
+                        const h = Math.round(w * (src.height / src.width));
+                        this.applyCustomResolution(w, h);
+                    }
+                }
+            };
         }
         if (this.outMp) {
             // Do not coerce incomplete drafts ("0", "0.") — that snaps back to 0.4 mid-typing.
@@ -3584,8 +3624,76 @@ class MiniMaxH3DirectorEditor {
             this.outMp.addEventListener("keydown", (e) => e.stopPropagation());
         }
         this.outLong.onchange = () => this.onOutputField("longEdge", +this.outLong.value);
-        this.outW.onchange = () => this.onOutputField("width", +this.outW.value);
+        this.outW.onchange = () => {
+            if (this.outHAuto?.checked) {
+                // Auto height: calculate from width and input media aspect ratio
+                let src = this.getSourceDimensions();
+                if (src.width === 0 && src.height === 0) {
+                    // Try i2i source dimensions for image tasks
+                    src = this.getI2iSourceDimensions?.() || { width: 0, height: 0 };
+                }
+                if (src.width > 0 && src.height > 0) {
+                    // Use input media aspect ratio
+                    const w = +this.outW.value;
+                    const h = Math.round(w * (src.height / src.width));
+                    this.applyCustomResolution(w, h);
+                    return;
+                }
+                // Try to load image and get dimensions
+                const seg = this.timeline.segments?.[this.selectedIndex];
+                const genImage = seg?.genImage || this.timeline.global?.genImage || {};
+                if (genImage.imageFile) {
+                    const img = new Image();
+                    img.onload = () => {
+                        const w = +this.outW.value;
+                        const h = Math.round(w * (img.naturalHeight / img.naturalWidth));
+                        this.applyCustomResolution(w, h);
+                    };
+                    img.src = refViewUrl(genImage.imageFile);
+                    return;
+                }
+                // If no source dimensions, use selected aspect ratio
+                const out = this.timeline.output || {};
+                const ar = out.aspectRatio ?? this.outAspect?.value ?? DEFAULT_ASPECT_RATIO;
+                if (!isCustomAspectRatio(ar)) {
+                    const resolved = resolutionFromSelector(
+                        ar,
+                        out.megapixels ?? this.outMp?.value ?? DEFAULT_MEGAPIXELS,
+                        out.multiple ?? MINIMAX_CANVAS_MULTIPLE,
+                    );
+                    if (resolved) {
+                        this.applyCustomResolution(+this.outW.value, resolved.height);
+                        return;
+                    }
+                }
+            }
+            this.onOutputField("width", +this.outW.value);
+        };
         this.outH.onchange = () => this.onOutputField("height", +this.outH.value);
+        if (this.outHAuto) {
+            this.outHAuto.onchange = () => {
+                if (this.outHAuto.checked) {
+                    // Enable auto height: disable the height field and calculate from input media aspect ratio
+                    this.outH.disabled = true;
+                    this.outH.style.opacity = "0.7";
+                    this.outH.style.backgroundColor = "rgb(135, 135, 135)";
+                    let src = this.getSourceDimensions();
+                    if (src.width === 0 && src.height === 0) {
+                        src = this.getI2iSourceDimensions?.() || { width: 0, height: 0 };
+                    }
+                    if (src.width > 0 && src.height > 0) {
+                        const w = +this.outW.value;
+                        const h = Math.round(w * (src.height / src.width));
+                        this.applyCustomResolution(w, h);
+                    }
+                } else {
+                    // Disable auto height: enable the height field
+                    this.outH.disabled = false;
+                    this.outH.style.opacity = "1";
+                    this.outH.style.backgroundColor = "";
+                }
+            };
+        }
         this.fpsInput.onchange = () => this.onFrameRateChanged(this.fpsInput.value);
         this.fpsInput.oninput = () => {
             clearTimeout(this._fpsInputTimer);
