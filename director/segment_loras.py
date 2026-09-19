@@ -138,5 +138,5 @@ def apply_segment_loras(
         patched, _ = comfy.sd.load_lora_for_models(
             patched, None, state_dict, float(row["strength"]), 0.0
         )
-        log.debug("Segment LoRA applied: %s @ %.2f", name, float(row["strength"]))
+        log.info("Segment LoRA applied: %s @ %.2f", name, float(row["strength"]))
     return patched

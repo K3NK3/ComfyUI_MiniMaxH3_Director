@@ -750,10 +750,13 @@ def execute_director_plan_core(
         seg_lora_rows = getattr(seg, "loras", None)
         seg_lora_label = describe_lora_rows(seg_lora_rows)
         if seg_lora_label:
+            log.info("Segment %d/%d: Applying LoRA(s): %s", ui_idx + 1, timeline_seg_total, seg_lora_label)
             seg_model = apply_segment_loras(seg_model, seg_lora_rows)
             reports.append(
                 f"Segment {ui_idx + 1}/{timeline_seg_total}: LoRA → {seg_lora_label}"
             )
+        else:
+            log.info("Segment %d/%d: No LoRA configured", ui_idx + 1, timeline_seg_total)
         will_refine = refine_will_sample(plan, seg)
         confirm_first = confirm_first_pass_enabled(plan)
         from .face_refine.pack import face_refine_enabled as _face_refine_on
