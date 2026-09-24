@@ -829,11 +829,13 @@ def execute_director_plan_core(
         prev_idx = seg.index - 1
         if continuity_active:
             if prev_idx in passthrough_indices:
-                raise ValueError(
-                    f"段间连贯：片段 #{seg.index + 1} 的前一段 #{prev_idx + 1} "
-                    "是源视频透传（未采样/无有效缓存），不能作为 motion context。"
-                    "请先运行该段，或将其纳入「选择运行」。"
+                log.warning(
+                    "Segment %d continuity: previous segment #%d is source video "
+                    "passthrough (no motion context available). Continuing without "
+                    "segment continuity for this segment.",
+                    seg.index + 1, prev_idx + 1,
                 )
+                continuity_active = False
             prev_seg = all_segments[prev_idx] if prev_idx >= 0 else None
             prev_from_this_run = prev_idx in resampled_this_run
             try:

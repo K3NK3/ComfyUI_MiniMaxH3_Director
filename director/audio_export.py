@@ -310,6 +310,25 @@ def _segment_frame_counts_for_audio(
     return [base + (1 if i < rem else 0) for i in range(n)]
 
 
+def _resample_audio(audio: dict[str, Any], target_sr: int) -> dict[str, Any]:
+    """Resample audio to target sample rate."""
+    if audio is None or not _audio_has_samples(audio):
+        return audio
+    sr = int(audio.get("sample_rate") or target_sr)
+    if sr == target_sr:
+        return audio
+    try:
+        import torchaudio
+        wave = audio["waveform"]
+        if not isinstance(wave, torch.Tensor) or wave.ndim != 3:
+            return audio
+        resampled = torchaudio.functional.resample(wave, sr, target_sr)
+        return {"waveform": resampled.contiguous(), "sample_rate": target_sr}
+    except Exception as exc:
+        log.warning("Resampling audio from %d to %d Hz failed (%s); using original.", sr, target_sr, exc)
+        return audio
+
+
 def _merge_generated_segment_audios(
     plan,
     segment_audios: list,
@@ -318,19 +337,45 @@ def _merge_generated_segment_audios(
     fps: float,
     frame_counts: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Concatenate per-segment AV audio into one timeline for merged video export."""
-    sr = SILENT_SAMPLE_RATE
-    for gen in segment_audios:
-        if _audio_has_samples(gen):
-            sr = int(gen.get("sample_rate") or sr) or SILENT_SAMPLE_RATE
-            break
+    """Concatenate per-segment AV audio into one timeline for merged video export.
+
+    For segments without generated audio (skipped in Select to Run), extracts
+    source video audio so passthrough works correctly in merged exports.
+    All audio is resampled to a common rate (44100 Hz) to avoid speed mismatches.
+    """
+    # Use 48000 Hz as common rate to match source video audio and avoid
+    # resampling artifacts on passthrough segments
+    sr = 48000
+
     counts = _segment_frame_counts_for_audio(
         plan, len(segment_audios), total_frames, frame_counts=frame_counts,
     )
     parts: list[torch.Tensor] = []
     max_ch = 2
+    timeline = plan.raw or {}
+    audio_cache = _execution_audio_cache(plan)
+
     for i, gen in enumerate(segment_audios):
         fc = counts[i] if i < len(counts) else 0
+        seg = plan.segments[i] if i < len(plan.segments) else None
+
+        # If no generated audio for this segment, try source extraction
+        if not _audio_has_samples(gen) and seg is not None:
+            log.info("Extracting source audio for unprocessed segment #%d", seg.index + 1)
+            extracted = extract_timeline_audio(
+                timeline,
+                seg.start_frame,
+                seg.end_frame,
+                fps,
+                audio_cache=audio_cache,
+            )
+            if _audio_has_samples(extracted):
+                gen = extracted
+
+        # Resample to common rate before padding/trimming
+        if _audio_has_samples(gen):
+            gen = _resample_audio(gen, sr)
+
         part = _pad_or_trim_audio_to_frames(
             gen if _audio_has_samples(gen) else None,
             frame_count=fc,
@@ -344,6 +389,7 @@ def _merge_generated_segment_audios(
         else:
             n = frames_to_audio_samples(fc, fps, sr)
             parts.append(torch.zeros(1, 2, max(0, n)))
+
     if not parts:
         return empty_audio_dict(sr)
     parts = [_align_audio_channels(p, max_ch) for p in parts]
