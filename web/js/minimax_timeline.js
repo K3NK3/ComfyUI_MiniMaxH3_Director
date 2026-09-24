@@ -516,6 +516,7 @@ const DIRECTOR_WIDGET_LABEL_KEYS = {
     save_group_videos: "widget.saveGroupVideos",
     rerun_when_done: "widget.rerunWhenDone",
     rerun_after_seconds: "widget.rerunAfterSeconds",
+    cache_frames_codec: "widget.cacheFramesCodec",
     export_source_images: "widget.exportSourceImages",
     export_pre_face_refine: "widget.exportPreFaceRefine",
     control_after_generate: "widget.controlAfterGenerate",
@@ -531,6 +532,7 @@ const DIRECTOR_WIDGET_TOOLTIP_KEYS = {
     save_group_videos: "widget.tooltip.saveGroupVideos",
     rerun_when_done: "widget.tooltip.rerunWhenDone",
     rerun_after_seconds: "widget.tooltip.rerunAfterSeconds",
+    cache_frames_codec: "widget.tooltip.cacheFramesCodec",
     export_source_images: "widget.tooltip.exportSourceImages",
     export_pre_face_refine: "widget.tooltip.exportPreFaceRefine",
 };
@@ -1679,6 +1681,7 @@ const PERF_WIDGET_ORDER = [
     "save_group_videos",
     "rerun_when_done",
     "rerun_after_seconds",
+    "cache_frames_codec",
 ];
 
 function moveDirectorPerfWidgetsBeforeTimeline(node) {
