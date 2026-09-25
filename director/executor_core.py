@@ -1382,7 +1382,7 @@ def execute_director_plan_core(
             )
         elif selflift_will_run(plan, seg):
             samples, low_carry = sample_selflift_stage(
-                model=seg_model,  # per-segment LoRA
+                model=seg_model,  # per-segment LoRA (low-res phase)
                 positive=positive,
                 negative=negative,
                 latent=latent,
@@ -1406,6 +1406,8 @@ def execute_director_plan_core(
                 vae=vae,
                 canvas_width=ctx_w,
                 canvas_height=ctx_h,
+                lora_rows=seg_lora_rows,  # for high-res phase if different model
+                lora_cache=None,
             )
             if isinstance(low_carry, dict) and "samples" in low_carry:
                 completed_low_carry[seg.index] = low_carry

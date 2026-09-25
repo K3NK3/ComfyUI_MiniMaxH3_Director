@@ -209,6 +209,8 @@ def sample_selflift_stage(
     vae=None,
     canvas_width: int = 0,
     canvas_height: int = 0,
+    lora_rows=None,
+    lora_cache=None,
 ):
     """Run low-res prefix + 3D lift + high-res tail. Returns (high_av, low_carry)."""
     def notify(phase: str, value: float) -> None:
@@ -218,6 +220,14 @@ def sample_selflift_stage(
     sampler_use = require_euler(sampler_name, pack)
     high_model = pack.get("sample_model") if pack.get("sample_model") is not None else model
     log.info("SelfLift: low-res model id=%d, high-res model id=%d (same=%s)", id(model), id(high_model), model is high_model)
+
+    # Apply segment LoRAs to high-res model if it differs from the passed-in model.
+    # The passed-in model already has LoRAs applied; high_model may be a different
+    # base model selected via SelfLift's sample_model option.
+    if high_model is not model and lora_rows is not None:
+        from ..segment_loras import apply_segment_loras
+        high_model = apply_segment_loras(high_model, lora_rows, state_dict_cache=lora_cache)
+        log.info("SelfLift: applied segment LoRAs to high-res model")
 
     # Resolve canvas from the (already pinned) high-res latent when unset.
     size = av_pixel_size(latent)
