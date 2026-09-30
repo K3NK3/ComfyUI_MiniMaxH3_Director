@@ -2946,12 +2946,6 @@ function appendBatchCard(list, editor, seg, index, ctx) {
             return (seg?.id && segs.find((s) => s?.id === seg.id)) || segs[index] || seg;
         }));
 
-        // Per-segment LoRA stack. Prompt-batch tasks (r2v included) never open
-        // the classic segment panel, so the section lives on the card itself.
-        // Group nodes do not carry a LoRA stack, so this stays editable even
-        // when the rest of the card is externally locked.
-        card.appendChild(createLoraSection(editor, seg));
-
         list.appendChild(card);
 }
 
