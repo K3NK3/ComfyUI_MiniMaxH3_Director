@@ -883,8 +883,10 @@ export async function openPromptLibrary(editor, { view = "prompts", category = "
             const j = await r.json();
             if (j.ok) {
                 flash(heading, tf("pl.regeneratedN", { n: j.regenerated }));
-                // Reload page to clear image cache and show new static thumbnails
-                setTimeout(() => location.reload(), 800);
+                // Suggest refresh to clear image cache (don't auto-reload - user might be generating)
+                setTimeout(() => {
+                    if (confirm(t("pl.refreshToSeeThumbs"))) location.reload();
+                }, 500);
             } else {
                 throw new Error(j.error || "Unknown error");
             }
