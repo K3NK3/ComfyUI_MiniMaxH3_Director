@@ -138,7 +138,10 @@ def _copy_thumb(source: str) -> str | None:
 
 
 def _write_thumb(frames, prefix: str = "h") -> str | None:
-    """Looping WebP (up to THUMB_FRAMES frames spread over the clip) from [F, H, W, C] 0..1 frames."""
+    """Looping WebP (up to THUMB_FRAMES frames spread over the clip) from [F, H, W, C] 0..1 frames.
+
+    Also writes a static JPG of the first frame (same name base) for play/pause toggling.
+    """
     try:
         import torch
         from PIL import Image
@@ -170,6 +173,9 @@ def _write_thumb(frames, prefix: str = "h") -> str | None:
                 quality=75,
                 method=4,
             )
+        # Static first-frame JPG for play/pause (same name base, smaller than PNG)
+        jpg_name = os.path.splitext(name)[0] + ".jpg"
+        images[0].save(_thumb_path(jpg_name), format="JPEG", quality=85)
         return name
     except Exception as exc:
         log.warning("Prompt history thumbnail failed: %s", exc)
@@ -437,8 +443,19 @@ async def minimax_prompt_library_op(request):
 
 async def minimax_prompt_thumb(request):
     name = str(request.query.get("name") or "")
+    static = request.query.get("static") == "1"
     if not _THUMB_NAME.match(name):
         return web.Response(status=404)
+    # For static requests, try JPG first (first frame), fall back to WebP
+    if static:
+        jpg_name = os.path.splitext(name)[0] + ".jpg"
+        path = _thumb_path(jpg_name)
+        if os.path.isfile(path):
+            return web.FileResponse(
+                path,
+                headers={"Content-Type": "image/jpeg", "Cache-Control": "max-age=31536000, immutable"},
+            )
+    # Animated WebP
     path = _thumb_path(name)
     if not os.path.isfile(path):
         return web.Response(status=404)

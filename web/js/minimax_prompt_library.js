@@ -194,7 +194,16 @@ function thumbURL(name) {
     return api.apiURL(`/minimax/director/prompt_thumb?name=${encodeURIComponent(name)}`);
 }
 
-/** Looping render thumbnail, or coloured initials when there is none yet. */
+function thumbStaticURL(name) {
+    return api.apiURL(`/minimax/director/prompt_thumb?name=${encodeURIComponent(name)}&static=1`);
+}
+
+/** Looping render thumbnail, or coloured initials when there is none yet.
+ *
+ * Plays only on hover (animated WebP). Paused state shows a static first-frame
+ * PNG to keep CPU/GPU usage low in large grids. No visible play/pause button.
+ * If no static PNG exists (older thumbnails), falls back to always playing.
+ */
 function promptThumb(entry, sizeClass) {
     const box = el("span", `mmx-pl-thumb ${sizeClass}`);
     const label = entry?.title || entry?.prompt || "";
@@ -208,13 +217,36 @@ function promptThumb(entry, sizeClass) {
         fallback();
         return box;
     }
+    const animatedSrc = thumbURL(entry.thumb);
+    const staticSrc = thumbStaticURL(entry.thumb);
+
     const img = el("img");
     img.alt = "";
     img.loading = "lazy";
     img.decoding = "async";
-    img.src = thumbURL(entry.thumb);
-    img.onerror = fallback;
     box.appendChild(img);
+
+    let hasStatic = true;
+    img.onerror = () => {
+        if (hasStatic) {
+            // Static PNG not available (older thumbnail); use animated version
+            hasStatic = false;
+            img.src = animatedSrc;
+        } else {
+            fallback();
+        }
+    };
+    img.src = staticSrc; // start paused (static first frame)
+
+    box.addEventListener("mouseenter", () => {
+        img.src = animatedSrc;
+    });
+    box.addEventListener("mouseleave", () => {
+        if (hasStatic) {
+            img.src = staticSrc;
+        }
+    });
+
     return box;
 }
 
@@ -230,7 +262,7 @@ function scenarioMosaic(entry, sizeClass) {
         img.alt = "";
         img.loading = "lazy";
         img.decoding = "async";
-        img.src = thumbURL(name);
+        img.src = thumbStaticURL(name); // static first frame for mosaics (low CPU)
         box.appendChild(img);
     }
     return box;
@@ -1557,7 +1589,7 @@ export function ensurePromptLibraryStyles() {
 .mmx-pl-mosaic.mmx-pl-thumb-sm { border-radius:8px; }
 
 .mmx-pl-overlay { position:fixed; inset:0; z-index:10040; display:flex; align-items:center; justify-content:center;
-    background:rgba(4,6,5,.62); backdrop-filter:blur(4px); animation:mmx-pl-fade .16s ease-out; }
+    background:rgba(4,6,5,.62); animation:mmx-pl-fade .16s ease-out; }
 .mmx-pl-dialog { width:min(1200px, 97vw); height:min(740px, 92vh); display:grid;
     grid-template-columns:210px minmax(0, 1fr) 350px; overflow:hidden; color:#eee; font-size:11px;
     background:linear-gradient(180deg, #151515, #0c0c0c); border:1px solid #2c2c2c; border-radius:14px;
