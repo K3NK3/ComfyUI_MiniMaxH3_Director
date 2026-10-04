@@ -463,3 +463,37 @@ async def minimax_prompt_thumb(request):
         path,
         headers={"Content-Type": "image/webp", "Cache-Control": "max-age=31536000, immutable"},
     )
+
+
+async def minimax_regenerate_thumbs(request):
+    """Regenerate static JPG first frames for all existing WebP thumbnails."""
+    try:
+        from PIL import Image
+
+        thumbs_dir = os.path.join(_root(), "thumbs")
+        if not os.path.isdir(thumbs_dir):
+            return web.json_response({"ok": True, "regenerated": 0})
+
+        regenerated = 0
+        for name in os.listdir(thumbs_dir):
+            if not _THUMB_NAME.match(name):
+                continue
+            jpg_name = os.path.splitext(name)[0] + ".jpg"
+            jpg_path = os.path.join(thumbs_dir, jpg_name)
+            if os.path.isfile(jpg_path):
+                continue  # Already has static version
+
+            webp_path = os.path.join(thumbs_dir, name)
+            try:
+                with Image.open(webp_path) as img:
+                    img.seek(0)
+                    img = img.convert("RGB")
+                    img.save(jpg_path, format="JPEG", quality=85)
+                    regenerated += 1
+            except Exception as exc:
+                log.warning("Failed to regenerate static thumb for %s: %s", name, exc)
+
+        return web.json_response({"ok": True, "regenerated": regenerated})
+    except Exception as exc:
+        log.warning("MiniMax H3 Director regenerate thumbs failed: %s", exc)
+        return web.json_response({"ok": False, "error": str(exc)}, status=500)

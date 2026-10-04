@@ -872,6 +872,29 @@ export async function openPromptLibrary(editor, { view = "prompts", category = "
             navItem(ui.view === "history", "🕘", t("pl.history"), s.history.length, () => go("history")),
             navItem(ui.view === "save", "💾", t("pl.saveGroups"), editorGroups(editor).items.length, () => go("save")),
         );
+
+    // Regenerate static thumbnails button (bottom of sidebar)
+    const regenBtn = btn("mmx-pl-side-btn", `🔄 ${t("pl.regenerateThumbs")}`, async () => {
+        regenBtn.disabled = true;
+        regenBtn.textContent = `⏳ ${t("pl.regenerating")}`;
+        try {
+            const r = await api.fetchApi("/minimax/director/regenerate_thumbs", { method: "POST" });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            if (j.ok) {
+                flash(heading, tf("pl.regeneratedN", { n: j.regenerated }));
+                loadPromptLibrary(true).then(() => repaint());
+            } else {
+                throw new Error(j.error || "Unknown error");
+            }
+        } catch (err) {
+            reportError(heading, err);
+        } finally {
+            regenBtn.disabled = false;
+            regenBtn.textContent = `🔄 ${t("pl.regenerateThumbs")}`;
+        }
+    });
+    side.appendChild(regenBtn);
     }
 
     // main grid
@@ -1620,6 +1643,10 @@ export function ensurePromptLibraryStyles() {
 .mmx-pl-side-head .mmx-pl-icon-btn { font-size:15px; }
 .mmx-pl-side-hint { padding:4px 8px; color:#5d6a62; font-size:10px; line-height:1.4; font-style:italic; }
 .mmx-pl-side-sep { height:1px; background:#1f1f1f; margin:10px 4px; }
+.mmx-pl-side-btn { width:100%; background:#161616; border:1px solid #333; color:#ccc; border-radius:7px;
+    padding:6px 10px; font-size:10.5px; cursor:pointer; margin-top:8px; font-family:inherit; }
+.mmx-pl-side-btn:hover:not(:disabled) { border-color:#4fff8f; color:#fff; }
+.mmx-pl-side-btn:disabled { opacity:.5; cursor:not-allowed; }
 .mmx-pl-side-input { width:100%; box-sizing:border-box; background:#181818; border:1px solid #4fff8f; border-radius:6px;
     color:#eee; padding:5px 8px; font-size:11px; outline:none; font-family:inherit; }
 .mmx-pl-main { display:flex; flex-direction:column; min-width:0; min-height:0; }
