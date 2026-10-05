@@ -11,6 +11,7 @@ import torch
 
 from ..lib.image_prep import assert_minimax_canvas, fit_canvas, fit_video_long_edge, limit_ref_image_dict
 from ..lib.task_modes import SUPPORTED_TASK_KEYS
+from ..lib.wildcard import expand_wildcards
 from ..nodes.conditioning import run_minimax_conditioning
 from .core_sampling import ShiftedModelCache, sample_single_stage
 from .selflift.pack import (
@@ -931,6 +932,19 @@ def execute_director_plan_core(
         )
 
         positive_prompt = seg.prompt
+
+        # Expand wildcards {option1|option2|option3} in the prompt
+        seed_for_wildcard = int(getattr(plan, "sample_seed", seed) or seed) + seg.index
+        expanded_prompt = expand_wildcards(positive_prompt, seed=seed_for_wildcard)
+        if expanded_prompt != positive_prompt:
+            log.info("Segment %d/%d: Expanded wildcards in prompt", ui_idx + 1, timeline_seg_total)
+            log.info("  Original: %s", positive_prompt)
+            log.info("  Expanded: %s", expanded_prompt)
+        positive_prompt = expanded_prompt
+
+        # Log the final prompt being processed
+        log.info("Segment %d/%d: Processing prompt", ui_idx + 1, timeline_seg_total)
+        log.info("  Prompt: %s", positive_prompt)
 
         if seg.task_key in {"fl2v", "i2v"}:
             from .fl2v_timeline import reinforce_fl2v_prompt

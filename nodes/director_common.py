@@ -267,6 +267,8 @@ def prepare_director_plan(
     semantic_bridge=None,
     refine=None,
     face_refine=None,
+    global_cond=None,
+    global_prompt_prepend=None,
 ):
     from ..director.external_groups import (
         build_plan_from_external_groups,
@@ -327,10 +329,22 @@ def prepare_director_plan(
         timeline_segment_total=count_all_timeline_segments(timeline_data),
     )
 
+    # Apply global prompt prepend if provided
+    effective_global_prompt = global_prompt
+    if global_prompt_prepend and str(global_prompt_prepend).strip():
+        prepend = str(global_prompt_prepend).strip()
+        if effective_global_prompt and str(effective_global_prompt).strip():
+            effective_global_prompt = f"{prepend} {effective_global_prompt}"
+        else:
+            effective_global_prompt = prepend
+        log.info("Prepended global prompt from external input")
+        log.info("  Prepend: %s", prepend)
+        log.info("  Result: %s", effective_global_prompt)
+
     plan = build_director_plan(
         timeline_data,
         global_task_type=task_type,
-        global_prompt=global_prompt,
+        global_prompt=effective_global_prompt,
         total_frames=total_frames,
         frame_rate=frame_rate,
         width=width,
@@ -341,7 +355,29 @@ def prepare_director_plan(
     plan = _attach_semantic_bridge(plan, semantic_bridge)
     plan = _attach_refine(plan, refine)
     plan = _attach_face_refine(plan, face_refine)
+    plan = _apply_global_conditional(plan, global_cond)
     log.info(plan_summary(plan).replace("\n", " | "))
+    return plan
+
+
+def _apply_global_conditional(plan, global_cond):
+    """Apply global conditioning prompt to all segments."""
+    if not global_cond or not str(global_cond).strip():
+        return plan
+    
+    cond = str(global_cond).strip()
+    log.info("Applying global conditioning to %d segments", len(plan.segments))
+    log.info("  Conditioning: %s", cond)
+    
+    for i, seg in enumerate(plan.segments):
+        # Append conditioning to each segment's prompt
+        original_prompt = seg.prompt
+        if seg.prompt and str(seg.prompt).strip():
+            seg.prompt = f"{seg.prompt} {cond}"
+        else:
+            seg.prompt = cond
+        log.info("  Segment %d: %s", i + 1, seg.prompt)
+    
     return plan
 
 

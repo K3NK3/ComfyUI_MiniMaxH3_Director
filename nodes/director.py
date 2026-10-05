@@ -191,6 +191,20 @@ class MiniMaxH3Director:
                         ),
                     },
                 ),
+                "cond": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Global conditioning prompt applied to all segments. Connect external prompt nodes (e.g. Florence) here for refmod. Leave unconnected to use timeline segment prompts.",
+                    },
+                ),
+                "globalprompt": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Prepend this text to the global prompt. Useful for adding style descriptors or context that should apply to all segments.",
+                    },
+                ),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -241,7 +255,7 @@ class MiniMaxH3Director:
 
         return first_pass_cache_disk_signature(unique_id)
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT", "IMAGE", "STRING", "IMAGE", "IMAGE")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT", "IMAGE", "STRING", "IMAGE", "IMAGE", "STRING")
     RETURN_NAMES = (
         "images",
         "audio",
@@ -251,8 +265,9 @@ class MiniMaxH3Director:
         "report",
         "images_pre_refine",
         "images_pre_face_refine",
+        "prompts",
     )
-    OUTPUT_IS_LIST = (True, True, False, False, True, False, True, True)
+    OUTPUT_IS_LIST = (True, True, False, False, True, False, True, True, False)
     FUNCTION = "execute"
     CATEGORY = _CATEGORY
     DESCRIPTION = (
@@ -309,9 +324,16 @@ class MiniMaxH3Director:
         clear_ram_between_segments=False,
         offload_segments_to_disk=False,
         save_group_videos=False,
+        cond=None,
+        globalprompt=None,
         **kwargs,
     ):
         del kwargs
+
+        # Global conditioning applied to all segments
+        global_cond = cond if cond and str(cond).strip() else None
+        # Global prompt prepend
+        global_prompt_prepend = globalprompt if globalprompt and str(globalprompt).strip() else None
 
         plan = prepare_director_plan(
             timeline_data=timeline_data,
@@ -329,6 +351,8 @@ class MiniMaxH3Director:
             selflift=selflift,
             refine=refine,
             face_refine=face_refine,
+            global_cond=global_cond,
+            global_prompt_prepend=global_prompt_prepend,
         )
         codec = str(cache_frames_codec or "raw").strip().lower()
         plan.cache_frames_codec = "ffv1" if codec == "ffv1" else "raw"
@@ -360,7 +384,23 @@ class MiniMaxH3Director:
                 )
             )
 
-            return finalize_director_outputs(
+            # Build concatenated prompts string for output
+            prompts_output = ""
+
+            # Include global prompt prepend if provided
+            if global_prompt_prepend and str(global_prompt_prepend).strip():
+                prompts_output += f"[Global Prompt] {str(global_prompt_prepend).strip()}\n\n"
+
+            # Include global conditioning if provided
+            if global_cond and str(global_cond).strip():
+                prompts_output += f"[Conditioning (applied to all segments)] {str(global_cond).strip()}\n\n"
+
+            for i, seg in enumerate(plan.segments):
+                if i > 0:
+                    prompts_output += "\n--- SEGMENT BREAK ---\n\n"
+                prompts_output += f"[Segment {i+1}] {seg.prompt}\n"
+
+            result = finalize_director_outputs(
                 plan,
                 combined,
                 segment_outputs,
@@ -375,6 +415,7 @@ class MiniMaxH3Director:
                 export_pre_face_refine=export_pre_face_refine,
                 block_final_images=held_for_confirmation,
             )
+            return (*result, prompts_output)
         finally:
             # Full source/reference PCM is execution-scoped.
             cache = getattr(plan, "audio_decode_cache", None)
