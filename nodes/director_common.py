@@ -329,22 +329,10 @@ def prepare_director_plan(
         timeline_segment_total=count_all_timeline_segments(timeline_data),
     )
 
-    # Apply global prompt prepend if provided
-    effective_global_prompt = global_prompt
-    if global_prompt_prepend and str(global_prompt_prepend).strip():
-        prepend = str(global_prompt_prepend).strip()
-        if effective_global_prompt and str(effective_global_prompt).strip():
-            effective_global_prompt = f"{prepend} {effective_global_prompt}"
-        else:
-            effective_global_prompt = prepend
-        log.info("Prepended global prompt from external input")
-        log.info("  Prepend: %s", prepend)
-        log.info("  Result: %s", effective_global_prompt)
-
     plan = build_director_plan(
         timeline_data,
         global_task_type=task_type,
-        global_prompt=effective_global_prompt,
+        global_prompt=global_prompt,
         total_frames=total_frames,
         frame_rate=frame_rate,
         width=width,
@@ -355,8 +343,29 @@ def prepare_director_plan(
     plan = _attach_semantic_bridge(plan, semantic_bridge)
     plan = _attach_refine(plan, refine)
     plan = _attach_face_refine(plan, face_refine)
+    plan = _apply_global_prompt_prepend(plan, global_prompt_prepend)
     plan = _apply_global_conditional(plan, global_cond)
     log.info(plan_summary(plan).replace("\n", " | "))
+    return plan
+
+
+def _apply_global_prompt_prepend(plan, global_prompt_prepend):
+    """Prepend global prompt text to all segment prompts."""
+    if not global_prompt_prepend or not str(global_prompt_prepend).strip():
+        return plan
+    
+    prepend = str(global_prompt_prepend).strip()
+    log.info("Prepending global prompt to %d segments", len(plan.segments))
+    log.info("  Prepend: %s", prepend)
+    
+    for i, seg in enumerate(plan.segments):
+        # Prepend to each segment's prompt
+        if seg.prompt and str(seg.prompt).strip():
+            seg.prompt = f"{prepend} {seg.prompt}"
+        else:
+            seg.prompt = prepend
+        log.info("  Segment %d: %s", i + 1, seg.prompt)
+    
     return plan
 
 
@@ -371,7 +380,6 @@ def _apply_global_conditional(plan, global_cond):
     
     for i, seg in enumerate(plan.segments):
         # Append conditioning to each segment's prompt
-        original_prompt = seg.prompt
         if seg.prompt and str(seg.prompt).strip():
             seg.prompt = f"{seg.prompt} {cond}"
         else:
