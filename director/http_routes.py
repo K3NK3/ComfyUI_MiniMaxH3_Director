@@ -526,6 +526,14 @@ async def minimax_first_pass_cache_status(request):
     if not re.fullmatch(r"\d+", node_id):
         return web.Response(status=400, text="Invalid Director node id.")
 
+    # Same key the executor uses: <cache_name>_<node_id> when 缓存文件夹名 is
+    # filled, node id otherwise. Never trust the raw string as a path segment.
+    from .segment_cache import resolve_segment_cache_key
+
+    cache_key = resolve_segment_cache_key(body.get("cache_name"), node_id)
+    if not cache_key:
+        return web.Response(status=400, text="Invalid segment cache name.")
+
     timeline_data = body.get("timeline_data") or ""
     if isinstance(timeline_data, dict):
         timeline_data = json.dumps(timeline_data, ensure_ascii=False)
@@ -569,7 +577,7 @@ async def minimax_first_pass_cache_status(request):
         if witness:
             plan.external_groups_witness = witness
         return web.json_response(
-            inspect_first_pass_cache(node_id, plan, external_groups=witness)
+            inspect_first_pass_cache(cache_key, plan, external_groups=witness)
         )
     except Exception as exc:
         log.warning("MiniMax H3 Director first-pass cache inspection failed: %s", exc)
@@ -595,9 +603,13 @@ async def minimax_clear_segment_cache(request):
         return web.Response(status=400, text="kind must be first_pass, final or all.")
 
     try:
-        from .segment_cache import clear_segment_cache
+        from .segment_cache import clear_segment_cache, resolve_segment_cache_key
 
-        removed = clear_segment_cache(node_id, kind=kind)
+        cache_key = resolve_segment_cache_key(body.get("cache_name"), node_id)
+        if not cache_key:
+            return web.Response(status=400, text="Invalid segment cache name.")
+
+        removed = clear_segment_cache(cache_key, kind=kind)
         return web.json_response({"removed": removed, "kind": kind})
     except Exception as exc:
         log.warning("MiniMax H3 Director clear segment cache failed: %s", exc)
@@ -665,17 +677,6 @@ def register_routes() -> bool:
 
     _register_route(routes, "GET", "/minimax/director/lora_previews", minimax_lora_previews)
     _register_route(routes, "GET", "/minimax/director/lora_preview", minimax_lora_preview)
-    from .prompt_library import (
-        minimax_prompt_library,
-        minimax_prompt_library_op,
-        minimax_prompt_thumb,
-        minimax_regenerate_thumbs,
-    )
-
-    _register_route(routes, "GET", "/minimax/director/prompt_library", minimax_prompt_library)
-    _register_route(routes, "POST", "/minimax/director/prompt_library", minimax_prompt_library_op)
-    _register_route(routes, "GET", "/minimax/director/prompt_thumb", minimax_prompt_thumb)
-    _register_route(routes, "POST", "/minimax/director/regenerate_thumbs", minimax_regenerate_thumbs)
     _ROUTES_REGISTERED = True
     log.info("MiniMax H3 Director HTTP routes registered")
     return True

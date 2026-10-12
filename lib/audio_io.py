@@ -94,8 +94,7 @@ def _parse_ffmpeg_audio_info(stderr: str) -> tuple[int, int]:
 def _probe_audio_stream(path: str) -> tuple[int, int]:
     probe = ffprobe_bin()
     if not probe or not path:
-        log.debug("Audio probe: no ffprobe or path, defaulting to 48000 Hz")
-        return 48000, 2
+        return 44100, 2
     try:
         res = subprocess.run(
             [
@@ -115,17 +114,15 @@ def _probe_audio_stream(path: str) -> tuple[int, int]:
         )
         text = res.stdout.decode(*_ENCODE_ARGS).strip()
         parts = [p.strip() for p in text.replace("\n", ",").split(",") if p.strip()]
-        ar = int(float(parts[0])) if parts else 48000
+        ar = int(float(parts[0])) if parts else 44100
         ac = int(parts[1]) if len(parts) > 1 else 2
         if ar <= 0:
-            ar = 48000
+            ar = 44100
         if ac <= 0:
             ac = 2
-        log.debug("Audio probe for %s: sr=%d, channels=%d", path, ar, ac)
         return ar, ac
-    except (subprocess.CalledProcessError, ValueError, IndexError) as exc:
-        log.debug("Audio probe failed for %s: %s, defaulting to 48000 Hz", path, exc)
-        return 48000, 2
+    except (subprocess.CalledProcessError, ValueError, IndexError):
+        return 44100, 2
 
 
 def frames_to_audio_samples(frame_count: int, fps: float, sample_rate: int) -> int:
@@ -378,8 +375,7 @@ def _load_full_audio(
         return None
     if not res.stdout:
         return None
-    # Use the probed sample rate, not ffmpeg's reported rate
-    # (ffmpeg may report a different rate due to resampling)
+    # The PCM uses the explicit -ar rate; -v error suppresses stream metadata.
     audio = torch.frombuffer(bytearray(res.stdout), dtype=torch.float32)
     usable = (int(audio.numel()) // out_ac) * out_ac
     if usable < out_ac:
