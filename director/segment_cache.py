@@ -193,11 +193,7 @@ def resolve_segment_cache_key(cache_name: Any, node_id: Any) -> str:
     name = normalize_cache_name(cache_name)
     if name and node:
         return f"{name}_{node}"
-    # If no cache name is provided, use a stable default to avoid cache
-    # collisions when node IDs change between runs. This ensures that
-    # "select to run" + "from prev" works correctly even if the node ID
-    # changes (e.g., when copying the node or using a different workflow).
-    return "minimax_director_default"
+    return node or name
 
 
 def _sanitize_dir_token(token: Any) -> str:
