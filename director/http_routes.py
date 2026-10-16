@@ -687,7 +687,7 @@ def register_routes() -> bool:
     )
 
     _register_route(routes, "GET", "/minimax/director/prompt_library", minimax_prompt_library)
-    _register_route(routes, "POST", "/minimax/director/prompt_library_op", minimax_prompt_library_op)
+    _register_route(routes, "POST", "/minimax/director/prompt_library", minimax_prompt_library_op)
     _register_route(routes, "GET", "/minimax/director/prompt_thumb", minimax_prompt_thumb)
     _register_route(routes, "POST", "/minimax/director/regenerate_thumbs", minimax_regenerate_thumbs)
 
