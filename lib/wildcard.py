@@ -22,6 +22,9 @@ def expand_wildcards(prompt: str, *, seed: int | None = None) -> str:
     if not prompt:
         return prompt
 
+    import logging
+    log = logging.getLogger("ComfyUI-MiniMaxH3-Director.wildcard")
+
     def replace_match(match):
         options = [o.strip() for o in match.group(1).split("|") if o.strip()]
         if not options:
@@ -31,9 +34,13 @@ def expand_wildcards(prompt: str, *, seed: int | None = None) -> str:
             r = random.Random(seed + hash(match.group(0)))
         else:
             r = random
-        return r.choice(options)
+        chosen = r.choice(options)
+        log.debug("Wildcard expanded: %s -> %s", match.group(0), chosen)
+        return chosen
 
     result = WILDCARD_RE.sub(replace_match, prompt)
+    if result != prompt:
+        log.info("Wildcards expanded in prompt")
     return result
 
 
