@@ -393,6 +393,10 @@ class MiniMaxH3Director:
                 )
             )
 
+            # Expand wildcards before generating prompts output so user sees
+            # the actual prompts that will be used (not the template with wildcards)
+            from ..lib.wildcard import expand_wildcards
+
             # Build concatenated prompts string for output
             prompts_output = ""
 
@@ -407,7 +411,10 @@ class MiniMaxH3Director:
             for i, seg in enumerate(plan.segments):
                 if i > 0:
                     prompts_output += "\n--- SEGMENT BREAK ---\n\n"
-                prompts_output += f"[Segment {i+1}] {seg.prompt}\n"
+                # Expand wildcards using the same seed that will be used during execution
+                seed_for_wildcard = int(getattr(plan, "sample_seed", seed) or seed) + seg.index
+                expanded_prompt = expand_wildcards(seg.prompt, seed=seed_for_wildcard)
+                prompts_output += f"[Segment {i+1}] {expanded_prompt}\n"
 
             result = finalize_director_outputs(
                 plan,
