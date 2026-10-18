@@ -365,31 +365,6 @@ class MiniMaxH3Director:
         codec = str(cache_frames_codec or "raw").strip().lower()
         plan.cache_frames_codec = "ffv1" if codec == "ffv1" else "raw"
 
-        # Expand wildcards before execution so user can see the actual prompts
-        # that will be used (not the template with wildcards). This also ensures
-        # the prompts output is available immediately after the node starts.
-        from ..lib.wildcard import expand_wildcards
-
-        prompts_output = ""
-
-        # Include global prompt prepend if provided
-        if global_prompt_prepend and str(global_prompt_prepend).strip():
-            prompts_output += f"[Global Prompt] {str(global_prompt_prepend).strip()}\n\n"
-
-        # Include global conditioning if provided
-        if global_cond and str(global_cond).strip():
-            prompts_output += f"[Conditioning (applied to all segments)] {str(global_cond).strip()}\n\n"
-
-        for i, seg in enumerate(plan.segments):
-            if i > 0:
-                prompts_output += "\n--- SEGMENT BREAK ---\n\n"
-            # Expand wildcards using the same seed that will be used during execution
-            seed_for_wildcard = int(getattr(plan, "sample_seed", seed) or seed) + seg.index
-            expanded_prompt = expand_wildcards(seg.prompt, seed=seed_for_wildcard)
-            prompts_output += f"[Segment {i+1}] {expanded_prompt}\n"
-            # Store the expanded prompt in the segment so executor uses it
-            seg.prompt = expanded_prompt
-
         try:
             combined, segment_outputs, segment_audios, report, export_frame_counts, pre_combined, pre_segments, held_for_confirmation, pre_face_combined, pre_face_segments = (
                 execute_director_plan_core(
@@ -417,6 +392,29 @@ class MiniMaxH3Director:
                     save_group_videos=save_group_videos,
                 )
             )
+
+            # Expand wildcards before generating prompts output so user sees
+            # the actual prompts that will be used (not the template with wildcards)
+            from ..lib.wildcard import expand_wildcards
+
+            # Build concatenated prompts string for output
+            prompts_output = ""
+
+            # Include global prompt prepend if provided
+            if global_prompt_prepend and str(global_prompt_prepend).strip():
+                prompts_output += f"[Global Prompt] {str(global_prompt_prepend).strip()}\n\n"
+
+            # Include global conditioning if provided
+            if global_cond and str(global_cond).strip():
+                prompts_output += f"[Conditioning (applied to all segments)] {str(global_cond).strip()}\n\n"
+
+            for i, seg in enumerate(plan.segments):
+                if i > 0:
+                    prompts_output += "\n--- SEGMENT BREAK ---\n\n"
+                # Expand wildcards using the same seed that will be used during execution
+                seed_for_wildcard = int(getattr(plan, "sample_seed", seed) or seed) + seg.index
+                expanded_prompt = expand_wildcards(seg.prompt, seed=seed_for_wildcard)
+                prompts_output += f"[Segment {i+1}] {expanded_prompt}\n"
 
             result = finalize_director_outputs(
                 plan,
