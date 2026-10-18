@@ -939,14 +939,8 @@ def execute_director_plan_core(
 
         positive_prompt = seg.prompt
 
-        # Expand wildcards {option1|option2|option3} in the prompt
-        seed_for_wildcard = int(getattr(plan, "sample_seed", seed) or seed) + seg.index
-        expanded_prompt = expand_wildcards(positive_prompt, seed=seed_for_wildcard)
-        if expanded_prompt != positive_prompt:
-            log.info("Segment %d/%d: Expanded wildcards in prompt", ui_idx + 1, timeline_seg_total)
-            log.info("  Original: %s", positive_prompt)
-            log.info("  Expanded: %s", expanded_prompt)
-        positive_prompt = expanded_prompt
+        # Wildcards are expanded before execution in nodes/director.py so the
+        # prompts output shows the actual prompts. No need to expand here.
 
         # Log the final prompt being processed
         log.info("Segment %d/%d: Processing prompt", ui_idx + 1, timeline_seg_total)
