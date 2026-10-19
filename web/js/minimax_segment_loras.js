@@ -626,7 +626,7 @@ export function ensureSegmentLoraStyles() {
     box-shadow:0 10px 26px rgba(0,0,0,.55); flex:0 0 auto; }
 
 .mmx-lora-overlay { position:fixed; inset:0; z-index:10050; display:flex; align-items:center; justify-content:center;
-    background:rgba(4,6,5,.62); backdrop-filter:blur(4px); animation:mmx-fade .16s ease-out; }
+    background:rgba(4,6,5,.62); animation:mmx-fade .16s ease-out; }
 .mmx-lora-picker { width:min(1000px, 96vw); height:min(660px, 90vh); display:grid; grid-template-rows:auto auto minmax(0, 1fr);
     background:linear-gradient(180deg, #151515, #0c0c0c); border:1px solid #2c2c2c; border-radius:14px; overflow:hidden;
     box-shadow:0 24px 60px rgba(0,0,0,.65), 0 0 0 1px rgba(79,255,143,.07); color:#eee; font-size:11px;
