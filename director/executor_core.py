@@ -1097,14 +1097,14 @@ def execute_director_plan_core(
                 # Last frame mode: use the last frame of the previous segment
                 # as the first frame of the next segment (simple continuation).
                 # This is simpler than guide/continue modes and works with Selflift.
-                # No opening grade or luma adjustment to avoid ghosting.
+                # Use a longer prefix (4 frames) for cleaner transitions.
                 from .h3_motion_context import apply_motion_context
 
                 positive, trim_frames, prev_export_trim = apply_motion_context(
                     positive,
                     latent,
                     vae=vae,
-                    context_length=1,  # Only use the last frame
+                    context_length=4,  # Use 4 frames for cleaner transition
                     context_latent=prev_av,
                     context_frames=prev_tail,
                     context_audio=prev_audio,
