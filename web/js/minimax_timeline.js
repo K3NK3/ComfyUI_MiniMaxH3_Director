@@ -224,6 +224,12 @@ function normalizeContinuityMode(raw) {
         || s === "guide+redraw"
         || s === "redraw"
     ) return "continue";
+    if (
+        s === "last_frame"
+        || s === "lastframe"
+        || s === "continue_from_last_frame"
+        || s === "from_last_frame"
+    ) return "last_frame";
     return DEFAULT_CONTINUITY_MODE;
 }
 
