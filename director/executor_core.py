@@ -95,6 +95,7 @@ from .segment_mp4_export import (
 from .segment_continuity import (
     concat_continuous_chunks,
     is_continue_mode,
+    is_last_frame_mode,
     is_continuity_active,
     match_export_opening_grade,
     resolve_prev_segment_output,
@@ -1084,6 +1085,27 @@ def execute_director_plan_core(
                     seam_min_mask=getattr(plan, "continuity_redraw", 0.10),
                 )
                 after_shift = install_continue_prefix_remask
+            elif is_last_frame_mode(plan):
+                # Last frame mode: use the last frame of the previous segment
+                # as the first frame of the next segment (simple continuation).
+                # This is simpler than guide/continue modes and works with Selflift.
+                from .h3_motion_context import apply_motion_context
+
+                positive, trim_frames, prev_export_trim = apply_motion_context(
+                    positive,
+                    latent,
+                    vae=vae,
+                    context_length=1,  # Only use the last frame
+                    context_latent=prev_av,
+                    context_frames=prev_tail,
+                    context_audio=prev_audio,
+                    audio_vae=audio_vae,
+                    continue_audio=pin_audio,
+                    keep_existing_keyframes=False,
+                    context_end_frame=prev_end_frame,
+                    audio_context_length=DEFAULT_AUDIO_CONTEXT_FRAMES,
+                )
+                after_shift = None
             else:
                 positive, trim_frames, prev_export_trim = apply_motion_context(
                     positive,

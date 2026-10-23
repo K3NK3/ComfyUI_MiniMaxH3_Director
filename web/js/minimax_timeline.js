@@ -3099,6 +3099,7 @@ class MiniMaxH3DirectorEditor {
                     <select class="bd-num" data-r="segment-continuity-mode" style="width:96px" data-i18n-title="tooltip.continuityMode">
                         <option value="guide" data-i18n="output.continuityMode.guide">引导</option>
                         <option value="continue" data-i18n="output.continuityMode.continue">引导+重绘</option>
+                        <option value="last_frame" data-i18n="output.continuityMode.lastFrame">最后帧继续</option>
                     </select>
                     <span data-r="segment-continuity-redraw-wrap" hidden>
                         <span class="bd-meta" data-i18n="output.continuityRedraw">重绘幅度</span>

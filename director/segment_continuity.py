@@ -124,11 +124,12 @@ def _truthy_continuity_flag(value) -> bool:
 
 CONTINUITY_MODE_GUIDE = "guide"
 CONTINUITY_MODE_CONTINUE = "continue"
+CONTINUITY_MODE_LAST_FRAME = "last_frame"
 DEFAULT_CONTINUITY_REDRAW = 0.10
 
 
 def resolve_continuity_mode(timeline: dict | None) -> str:
-    """Global 引导 / 引导+重绘 strategy. Default guide. Ignored when continuity is off."""
+    """Global 引导 / 引导+重绘 / last_frame strategy. Default guide. Ignored when continuity is off."""
     output = (timeline or {}).get("output") if isinstance(timeline, dict) else None
     if not isinstance(output, dict):
         return CONTINUITY_MODE_GUIDE
@@ -142,6 +143,13 @@ def resolve_continuity_mode(timeline: dict | None) -> str:
         "redraw",
     }:
         return CONTINUITY_MODE_CONTINUE
+    if isinstance(raw, str) and raw.strip().lower() in {
+        "last_frame",
+        "lastframe",
+        "continue_from_last_frame",
+        "from_last_frame",
+    }:
+        return CONTINUITY_MODE_LAST_FRAME
     return CONTINUITY_MODE_GUIDE
 
 
@@ -187,6 +195,14 @@ def is_continue_mode(plan) -> bool:
         return False
     mode = str(getattr(plan, "continuity_mode", CONTINUITY_MODE_GUIDE) or "").strip().lower()
     return mode == CONTINUITY_MODE_CONTINUE
+
+
+def is_last_frame_mode(plan) -> bool:
+    """True when master continuity is on and strategy is last_frame (continue from last frame)."""
+    if plan is None or not getattr(plan, "continuity_enabled", False):
+        return False
+    mode = str(getattr(plan, "continuity_mode", CONTINUITY_MODE_GUIDE) or "").strip().lower()
+    return mode == CONTINUITY_MODE_LAST_FRAME
 
 
 def resolve_continuity_settings(timeline: dict, *, segment_count: int) -> tuple[bool, int]:
