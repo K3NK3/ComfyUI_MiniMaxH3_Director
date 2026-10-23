@@ -797,13 +797,21 @@ def execute_director_plan_core(
         )
 
         target_len = max(1, int(seg.frame_count or plan.total_frames or 124))
-        raw_clip = resolve_segment_raw_clip(plan, seg)
+
+        # Only resolve raw clip for v2v/rv2v tasks that need a source video
+        needs_source_video = seg.task_key in ("v2v", "rv2v")
+        if needs_source_video:
+            raw_clip = resolve_segment_raw_clip(plan, seg)
+        else:
+            raw_clip = None
 
         if seg.source_clip is not None:
             body_raw = seg.source_clip
             target_len = max(target_len, int(body_raw.shape[0]))
-        else:
+        elif raw_clip is not None:
             body_raw = raw_clip[:target_len] if int(raw_clip.shape[0]) > target_len else raw_clip
+        else:
+            body_raw = None
 
         if body_raw is not None and body_raw.shape[0] > 0:
             if plan.output_mode == "fixed":
