@@ -1097,6 +1097,7 @@ def execute_director_plan_core(
                 # Last frame mode: use the last frame of the previous segment
                 # as the first frame of the next segment (simple continuation).
                 # This is simpler than guide/continue modes and works with Selflift.
+                # No opening grade or luma adjustment to avoid ghosting.
                 from .h3_motion_context import apply_motion_context
 
                 positive, trim_frames, prev_export_trim = apply_motion_context(
@@ -1114,6 +1115,10 @@ def execute_director_plan_core(
                     audio_context_length=DEFAULT_AUDIO_CONTEXT_FRAMES,
                 )
                 after_shift = None
+                # Skip opening grade and luma adjustment for last_frame mode
+                # to avoid ghosting artifacts.
+                plan.skip_opening_grade = True
+                plan.skip_luma_adjustment = True
             else:
                 positive, trim_frames, prev_export_trim = apply_motion_context(
                     positive,
@@ -1693,7 +1698,8 @@ def execute_director_plan_core(
                 pre_chunk = pre_chunk.float()
         else:
             pre_chunk = chunk
-        if trim_frames > 0 and prev_idx >= 0 and is_continuity_active(plan, seg):
+        # Skip opening grade for last_frame mode to avoid ghosting artifacts
+        if trim_frames > 0 and prev_idx >= 0 and is_continuity_active(plan, seg) and not is_last_frame_mode(plan):
             prev_export = completed_outputs.get(prev_idx)
             if prev_export is not None and int(prev_export.shape[0]) >= 1:
                 same_pre = pre_chunk is chunk
@@ -2150,7 +2156,7 @@ def execute_director_plan_core(
             "and continuity pin (no full-timeline concat)."
         )
     else:
-        combined = concat_continuous_chunks(export_chunks, export_segments, plan)
+        combined = concat_continuous_chunks(export_chunks, export_segments, plan, skip_luma=is_last_frame_mode(plan))
         pre_source = export_pre_chunks if export_pre_chunks else segment_pre_refine
         if not pre_source:
             pre_source = list(segment_outputs)
@@ -2161,7 +2167,7 @@ def execute_director_plan_core(
         pre_combined = (
             combined
             if same_as_final
-            else concat_continuous_chunks(pre_source, export_segments, plan)
+            else concat_continuous_chunks(pre_source, export_segments, plan, skip_luma=is_last_frame_mode(plan))
         )
         if export_pre_face_refine:
             face_source = export_pre_face_chunks if export_pre_face_chunks else segment_pre_face
@@ -2174,7 +2180,7 @@ def execute_director_plan_core(
             pre_face_combined = (
                 combined
                 if same_as_face
-                else concat_continuous_chunks(face_source, export_segments, plan)
+                else concat_continuous_chunks(face_source, export_segments, plan, skip_luma=is_last_frame_mode(plan))
             )
         else:
             pre_face_combined = None

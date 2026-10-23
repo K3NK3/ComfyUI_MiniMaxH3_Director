@@ -1774,11 +1774,15 @@ def concat_continuous_chunks(
     chunks: list[torch.Tensor],
     segments: list[SegmentPlan],
     plan: DirectorPlan,
+    skip_luma: bool = False,
 ) -> torch.Tensor:
     """Concatenate with exposure-only seam fix.
 
     Generation settling burn-in handles flash/pulse. Concat RGB morphs are OFF
     (00035: body0/hold→pop caused 拖影 and stutter pulses).
+
+    If skip_luma is True, skip the additive opening luma adjustment (used for
+    last_frame mode to avoid ghosting artifacts).
     """
     del segments
     if not chunks:
@@ -1794,7 +1798,8 @@ def concat_continuous_chunks(
         if float(CONTINUITY_SPIKE_WEIGHT) > 0:
             body = _ease_opening_spikes(body)
         body = _soften_body0_toward_prev(body, left)
-        body = _additive_opening_luma(body, left)
+        if not skip_luma:
+            body = _additive_opening_luma(body, left)
         left, body = _micro_seam_bridge(left, body)
         fixed[-1] = left
         fixed.append(body)
