@@ -290,9 +290,10 @@ def _build_gen_source_clips(
     width: int,
     output_mode: str,
     ref_max_size: int,
+    continuity_mode: str = "guide",
 ) -> list[torch.Tensor]:
     chunks: list[torch.Tensor] = []
-    for _start, end, seg_data in ranges:
+    for seg_idx, (_start, end, seg_data) in enumerate(ranges):
         frame_count = end - _start
         if frame_count <= 0:
             continue
@@ -303,9 +304,16 @@ def _build_gen_source_clips(
             continue
         ref = _resolve_gen_image_ref(seg_data, edit_mode=edit_mode, global_block=global_block)
         if ref is None:
-            seg_idx = len(chunks) + 1
+            # In last_frame mode, i2v segments after the first can use the
+            # previous segment's last frame as their source (provided at execution time).
+            if continuity_mode == "last_frame" and task_key == "i2v" and seg_idx > 0:
+                # Use a small placeholder clip to indicate no source image for this segment.
+                # The executor will use the previous segment's last frame instead.
+                chunks.append(torch.full((1, 16, 16, 3), 0.5, dtype=torch.float32))
+                continue
+            seg_num = len(chunks) + 1
             raise ValueError(
-                f"Segment #{seg_idx} has no source image. "
+                f"Segment #{seg_num} has no source image. "
                 "Upload an image in the generation timeline (global or per-segment)."
             )
         img = _load_gen_image_tensor(ref)
@@ -449,6 +457,10 @@ def build_gen_director_plan(
         frame_rate=fps,
     )
 
+    # Resolve continuity mode early so source clip building can handle last_frame mode
+    from .segment_continuity import resolve_continuity_mode
+    continuity_mode = resolve_continuity_mode(timeline)
+
     if submode == "gen_blank":
         out_mode = "fixed"
         fw = int(output_block.get("width") or timeline.get("width") or width or 0)
@@ -507,6 +519,7 @@ def build_gen_director_plan(
             width=out_w,
             output_mode=out_mode,
             ref_max_size=ref_max,
+            continuity_mode=continuity_mode,
         )
         attach_source_clips = is_prompt_batch_timeline(timeline, task_key) and task_key in ("i2i", "i2v")
         if attach_source_clips:
@@ -653,7 +666,14 @@ def build_gen_director_plan(
             )
         if seg_task_key == "i2v":
             if idx < len(source_clips):
-                seg_source = source_clips[idx].clone()
+                clip = source_clips[idx]
+                # Check if this is a placeholder clip (1x16x16) for last_frame mode.
+                # Placeholder clips indicate no source image; the executor will use
+                # the previous segment's last frame instead.
+                if clip.shape == (1, 16, 16, 3):
+                    seg_source = None
+                else:
+                    seg_source = clip.clone()
             else:
                 img_ref = _resolve_gen_image_ref(
                     seg_data if isinstance(seg_data, dict) else {},
@@ -721,7 +741,6 @@ def build_gen_director_plan(
 
     from .segment_continuity import (
         resolve_continuity_keep_tail,
-        resolve_continuity_mode,
         resolve_continuity_redraw,
         resolve_continuity_settings,
     )
@@ -729,7 +748,6 @@ def build_gen_director_plan(
     continuity_enabled, continuity_overlap = resolve_continuity_settings(
         timeline, segment_count=len(segments)
     )
-    continuity_mode = resolve_continuity_mode(timeline)
     continuity_redraw = resolve_continuity_redraw(timeline)
     continuity_keep_tail = resolve_continuity_keep_tail(timeline)
 
