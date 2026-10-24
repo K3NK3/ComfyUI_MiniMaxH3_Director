@@ -1104,7 +1104,7 @@ def execute_director_plan_core(
                     positive,
                     latent,
                     vae=vae,
-                    context_length=4,  # Use 4 frames for cleaner transition
+                    context_length=1,  # Use 1 frame to reduce green tint with Selflift
                     context_latent=prev_av,
                     context_frames=prev_tail,
                     context_audio=prev_audio,
