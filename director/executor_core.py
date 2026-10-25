@@ -1073,6 +1073,10 @@ def execute_director_plan_core(
                 and (prev_av is not None or prev_audio is not None)
             )
             prev_av = select_continuity_pin_latent(latent, prev_first_pass_av, prev_av)
+            # Import here so it's available for all continuity modes (guide, last_frame, continue).
+            # Previously this import was inside the last_frame branch only, which caused an
+            # UnboundLocalError when using guide mode.
+            from .h3_motion_context import apply_motion_context
             if is_continue_mode(plan):
                 from .h3_latent_continue import (
                     apply_latent_continue,
@@ -1098,8 +1102,6 @@ def execute_director_plan_core(
                 # as the first frame of the next segment (simple continuation).
                 # This is simpler than guide/continue modes and works with Selflift.
                 # Use a longer prefix (4 frames) for cleaner transitions.
-                from .h3_motion_context import apply_motion_context
-
                 positive, trim_frames, prev_export_trim = apply_motion_context(
                     positive,
                     latent,
