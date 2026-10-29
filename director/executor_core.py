@@ -569,6 +569,7 @@ def execute_director_plan_core(
     bool,
     torch.Tensor | None,
     list[torch.Tensor],
+    list[dict],
 ]:
     """Process every segment with MiniMax H3 conditioning + single-stage sampling."""
     # "Free RAM between segments" also does everything the VRAM toggle does.
@@ -2190,6 +2191,16 @@ def execute_director_plan_core(
     shift_cache.clear()
     if clear_vram_between_segments:
         cleanup_segment_vram(enabled=True, unload_models=False)
+    # Collect latents for all segments (aligned with run_list order)
+    segment_latents = []
+    for idx in run_list:
+        latent = completed_av_latents.get(idx)
+        if latent is not None:
+            segment_latents.append(latent)
+        else:
+            # Fallback: empty dict for segments without cached latent
+            segment_latents.append({})
+
     return (
         combined,
         segment_outputs,
@@ -2201,4 +2212,5 @@ def execute_director_plan_core(
         held_for_confirmation,
         pre_face_combined,
         segment_pre_face,
+        segment_latents,
     )
