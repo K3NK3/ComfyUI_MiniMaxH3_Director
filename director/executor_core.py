@@ -570,6 +570,7 @@ def execute_director_plan_core(
     torch.Tensor | None,
     list[torch.Tensor],
     list[dict],
+    list[list],
 ]:
     """Process every segment with MiniMax H3 conditioning + single-stage sampling."""
     # "Free RAM between segments" also does everything the VRAM toggle does.
@@ -736,6 +737,7 @@ def execute_director_plan_core(
     completed_pre_refine: dict[int, torch.Tensor] = {}
     completed_pre_face: dict[int, torch.Tensor] = {}
     completed_refine_passes: dict[int, list[tuple[str, torch.Tensor]]] = {}
+    completed_conditionings: dict[int, object] = {}
     completed_av_latents: dict[int, dict] = {}
     completed_first_pass_av: dict[int, dict] = {}
     completed_low_carry: dict[int, dict] = {}
@@ -1057,6 +1059,9 @@ def execute_director_plan_core(
             ref_image_size=official_ref_image_size(resolve_ref_image_size(seg, plan)),
         )
         cond_s = time.perf_counter() - t_cond
+
+        # Store conditioning for output
+        completed_conditionings[seg.index] = positive
 
         from .semantic_bridge import apply_semantic_bridge
 
@@ -2201,6 +2206,16 @@ def execute_director_plan_core(
             # Fallback: empty dict for segments without cached latent
             segment_latents.append({})
 
+    # Collect conditionings for all segments (aligned with run_list order)
+    segment_conditionings = []
+    for idx in run_list:
+        cond = completed_conditionings.get(idx)
+        if cond is not None:
+            segment_conditionings.append(cond)
+        else:
+            # Fallback: empty list for segments without cached conditioning
+            segment_conditionings.append([])
+
     return (
         combined,
         segment_outputs,
@@ -2213,4 +2228,5 @@ def execute_director_plan_core(
         pre_face_combined,
         segment_pre_face,
         segment_latents,
+        segment_conditionings,
     )

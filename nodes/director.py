@@ -262,7 +262,7 @@ class MiniMaxH3Director:
             resolve_segment_cache_key(cache_name, unique_id)
         )
 
-    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT", "IMAGE", "STRING", "IMAGE", "IMAGE", "STRING", "LATENT")
+    RETURN_TYPES = ("IMAGE", "AUDIO", "FLOAT", "INT", "IMAGE", "STRING", "IMAGE", "IMAGE", "STRING", "LATENT", "CONDITIONING")
     RETURN_NAMES = (
         "images",
         "audio",
@@ -274,8 +274,9 @@ class MiniMaxH3Director:
         "images_pre_face_refine",
         "prompts",
         "latent",
+        "conditioning",
     )
-    OUTPUT_IS_LIST = (True, True, False, False, True, False, True, True, False, True)
+    OUTPUT_IS_LIST = (True, True, False, False, True, False, True, True, False, True, True)
     FUNCTION = "execute"
     CATEGORY = _CATEGORY
     DESCRIPTION = (
@@ -367,7 +368,7 @@ class MiniMaxH3Director:
         plan.cache_frames_codec = "ffv1" if codec == "ffv1" else "raw"
 
         try:
-            combined, segment_outputs, segment_audios, report, export_frame_counts, pre_combined, pre_segments, held_for_confirmation, pre_face_combined, pre_face_segments, segment_latents = (
+            combined, segment_outputs, segment_audios, report, export_frame_counts, pre_combined, pre_segments, held_for_confirmation, pre_face_combined, pre_face_segments, segment_latents, segment_conditionings = (
                 execute_director_plan_core(
                     plan,
                     node_id=unique_id,
@@ -432,7 +433,7 @@ class MiniMaxH3Director:
                 export_pre_face_refine=export_pre_face_refine,
                 block_final_images=held_for_confirmation,
             )
-            return (*result, prompts_output, segment_latents)
+            return (*result, prompts_output, segment_latents, segment_conditionings)
         finally:
             # Full source/reference PCM is execution-scoped.
             cache = getattr(plan, "audio_decode_cache", None)
