@@ -569,6 +569,8 @@ def execute_director_plan_core(
     bool,
     torch.Tensor | None,
     list[torch.Tensor],
+    list[dict],
+    list[list],
 ]:
     """Process every segment with MiniMax H3 conditioning + single-stage sampling."""
     # "Free RAM between segments" also does everything the VRAM toggle does.
@@ -735,6 +737,7 @@ def execute_director_plan_core(
     completed_pre_refine: dict[int, torch.Tensor] = {}
     completed_pre_face: dict[int, torch.Tensor] = {}
     completed_refine_passes: dict[int, list[tuple[str, torch.Tensor]]] = {}
+    completed_conditionings: dict[int, object] = {}
     completed_av_latents: dict[int, dict] = {}
     completed_first_pass_av: dict[int, dict] = {}
     completed_low_carry: dict[int, dict] = {}
@@ -1057,6 +1060,9 @@ def execute_director_plan_core(
         )
         cond_s = time.perf_counter() - t_cond
 
+        # Store conditioning for output
+        completed_conditionings[seg.index] = positive
+
         from .semantic_bridge import apply_semantic_bridge
 
         positive, sb_note = apply_semantic_bridge(positive, plan, task_key=seg.task_key)
@@ -1073,6 +1079,10 @@ def execute_director_plan_core(
                 and (prev_av is not None or prev_audio is not None)
             )
             prev_av = select_continuity_pin_latent(latent, prev_first_pass_av, prev_av)
+            # Import here so it's available for all continuity modes (guide, last_frame, continue).
+            # Previously this import was inside the last_frame branch only, which caused an
+            # UnboundLocalError when using guide mode.
+            from .h3_motion_context import apply_motion_context
             if is_continue_mode(plan):
                 from .h3_latent_continue import (
                     apply_latent_continue,
@@ -1098,8 +1108,6 @@ def execute_director_plan_core(
                 # as the first frame of the next segment (simple continuation).
                 # This is simpler than guide/continue modes and works with Selflift.
                 # Use a longer prefix (4 frames) for cleaner transitions.
-                from .h3_motion_context import apply_motion_context
-
                 positive, trim_frames, prev_export_trim = apply_motion_context(
                     positive,
                     latent,
@@ -1698,8 +1706,10 @@ def execute_director_plan_core(
                 pre_chunk = pre_chunk.float()
         else:
             pre_chunk = chunk
-        # Skip opening grade for last_frame mode to avoid ghosting artifacts
-        if trim_frames > 0 and prev_idx >= 0 and is_continuity_active(plan, seg) and not is_last_frame_mode(plan):
+        # Skip opening grade for last_frame mode or large context windows to avoid ghosting
+        # artifacts. With motion context (>= 20 frames), the model already has enough
+        # continuity information, so the opening grade is redundant and can cause ghosting.
+        if trim_frames > 0 and prev_idx >= 0 and is_continuity_active(plan, seg) and not is_last_frame_mode(plan) and context_n < 20:
             prev_export = completed_outputs.get(prev_idx)
             if prev_export is not None and int(prev_export.shape[0]) >= 1:
                 same_pre = pre_chunk is chunk
@@ -2188,6 +2198,26 @@ def execute_director_plan_core(
     shift_cache.clear()
     if clear_vram_between_segments:
         cleanup_segment_vram(enabled=True, unload_models=False)
+    # Collect latents for all segments (aligned with run_list order)
+    segment_latents = []
+    for idx in run_list:
+        latent = completed_av_latents.get(idx)
+        if latent is not None:
+            segment_latents.append(latent)
+        else:
+            # Fallback: empty dict for segments without cached latent
+            segment_latents.append({})
+
+    # Collect conditionings for all segments (aligned with run_list order)
+    segment_conditionings = []
+    for idx in run_list:
+        cond = completed_conditionings.get(idx)
+        if cond is not None:
+            segment_conditionings.append(cond)
+        else:
+            # Fallback: empty list for segments without cached conditioning
+            segment_conditionings.append([])
+
     return (
         combined,
         segment_outputs,
@@ -2199,4 +2229,6 @@ def execute_director_plan_core(
         held_for_confirmation,
         pre_face_combined,
         segment_pre_face,
+        segment_latents,
+        segment_conditionings,
     )
