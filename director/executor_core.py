@@ -1978,6 +1978,7 @@ def execute_director_plan_core(
 
         # Prefer exact cache; pipeline-stale disk render is ok. A different
         # source video is rejected so v2v/rv2v can passthrough the new clip.
+        log.info("Loading cache for unselected segment %d...", seg.index + 1)
         cached = load_segment_cache(node_id, seg, plan)
         used_stale = False
         if cached is None:
