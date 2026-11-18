@@ -323,13 +323,20 @@ def load_video_resampled(
     eof_warned = False
     native_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
+    # Calculate native frame positions for all requested frames
+    native_positions = []
     for src_idx in unique:
         t_sec = max(0.0, src_idx / float(frame_rate or 24.0))
         native_frame = int(round(t_sec * native_fps))
         if native_count > 0:
             native_frame = min(native_frame, native_count - 1)
+        native_positions.append((src_idx, native_frame))
+
+    # Read frames sequentially, seeking only when necessary
+    current_native_pos = -1
+    for src_idx, native_frame in native_positions:
         # Past the last decoded frame: timeline clips hold; refs stop (no fake tail).
-        if fallback is not None and native_count > 0 and int(round(t_sec * native_fps)) >= native_count:
+        if fallback is not None and native_count > 0 and native_frame >= native_count:
             if not hold_past_eof:
                 break
             decoded[src_idx] = fallback
@@ -338,37 +345,40 @@ def load_video_resampled(
                     "Video ended at native frame %d (t=%.3fs); holding last frame "
                     "for the rest of %s",
                     native_count,
-                    (native_count - 1) / native_fps if native_fps else t_sec,
+                    (native_count - 1) / native_fps if native_fps else 0.0,
                     path,
                 )
                 eof_warned = True
             continue
-        cap.set(cv2.CAP_PROP_POS_FRAMES, native_frame)
+
+        # Seek only if we're not at the right position
+        if current_native_pos != native_frame:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, native_frame)
+            current_native_pos = native_frame
+
         ok, bgr = cap.read()
         if not ok or bgr is None:
             if fallback is not None:
                 if not hold_past_eof:
                     log.info(
-                        "Stopped reading %s at native frame %d (t=%.3fs); "
+                        "Stopped reading %s at native frame %d; "
                         "keeping %d real frame(s), not padding to EOF.",
                         path,
                         native_frame,
-                        t_sec,
                         len(decoded),
                     )
                     break
                 decoded[src_idx] = fallback
                 if not eof_warned:
                     log.warning(
-                        "Failed to read frame %d (t=%.3fs) from %s; "
+                        "Failed to read frame %d from %s; "
                         "holding the last decoded frame for the rest of this clip.",
                         native_frame,
-                        t_sec,
                         path,
                     )
                     eof_warned = True
             else:
-                log.warning("Failed to read frame %d (t=%.3fs) from %s", native_frame, t_sec, path)
+                log.warning("Failed to read frame %d from %s", native_frame, path)
             continue
 
         if rotate_90_cw:
@@ -378,6 +388,7 @@ def load_video_resampled(
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         decoded[src_idx] = rgb
         fallback = rgb
+        current_native_pos += 1
 
     cap.release()
 
