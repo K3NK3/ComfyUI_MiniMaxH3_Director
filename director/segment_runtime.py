@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import torch
+
+log = logging.getLogger("ComfyUI-MiniMaxH3-Director.director.segment_runtime")
 
 from ..lib.image_prep import fit_canvas, fit_video_long_edge
 from ..lib.video_io import load_timeline_segment
