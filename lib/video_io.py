@@ -291,13 +291,16 @@ def load_video_resampled(
     the last readable frame. Reference videos should pass False — MiniMax
     accepts a shorter ref and will snap it to the 17n+5 grid.
     """
+    log.info("load_video_resampled called for %s (frame_rate=%s, %s frames)", path, frame_rate, len(frame_indices))
     if not frame_indices:
         raise ValueError("No frames requested from video.")
 
     cv2 = _require_cv2()
+    log.info("  -> opening video file...")
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         raise ValueError(f"Cannot open video: {path}")
+    log.info("  -> video file opened")
 
     native_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
     if native_fps <= 0:
@@ -393,7 +396,9 @@ def load_video_resampled(
         rows.append(decoded.get(int(idx), last))
         last = rows[-1]
 
-    return torch.from_numpy(np.stack(rows, axis=0))
+    result = torch.from_numpy(np.stack(rows, axis=0))
+    log.info("load_video_resampled done, returning %s frames", result.shape[0])
+    return result
 
 
 def _aspect_ratio(w: int, h: int) -> float:
@@ -605,6 +610,7 @@ def _decode_timeline_entries(
     frame_rate: float,
     default_long_edge: int,
 ) -> torch.Tensor:
+    log.info("_decode_timeline_entries called for %s entries", len(entries))
     clips = video_clips_from_timeline(timeline)
     if not clips:
         raise ValueError("No video clips in MiniMax H3 Director timeline.")
@@ -620,6 +626,7 @@ def _decode_timeline_entries(
         clip = clips[clip_idx]
         path = resolve_video_path(clip)
         sorted_idx = sorted(frame_set)
+        log.info("  -> loading video clip %s from %s (%s frames)", clip_idx, path, len(sorted_idx))
         tensor = load_video_resampled(
             path,
             frame_rate,
@@ -628,6 +635,7 @@ def _decode_timeline_entries(
             storage_height=clip.get("storageHeight"),
             long_edge=int(clip.get("longEdge") or default_long_edge),
         )
+        log.info("  -> loaded %s frames from clip %s", tensor.shape[0], clip_idx)
         for row, fi in enumerate(sorted_idx):
             frame_tensors[(clip_idx, fi)] = tensor[row]
 
@@ -643,7 +651,9 @@ def _decode_timeline_entries(
         fallback = tensor
         rows.append(tensor)
 
-    return torch.stack(rows, dim=0)
+    result = torch.stack(rows, dim=0)
+    log.info("_decode_timeline_entries done, returning %s frames", result.shape[0])
+    return result
 
 
 def load_reference_video_clip(
@@ -718,6 +728,7 @@ def load_reference_video_clip(
 
 def load_timeline_segment(timeline: dict, start: int, end: int) -> torch.Tensor:
     """Decode only logical frames in [start, end) 鈥?supports arbitrarily long timelines."""
+    log.info("load_timeline_segment called for frames [%s, %s)", start, end)
     total = logical_frame_count(timeline)
     start = max(0, min(int(start), total))
     end = max(start, min(int(end), total))
@@ -727,6 +738,7 @@ def load_timeline_segment(timeline: dict, start: int, end: int) -> torch.Tensor:
     video = timeline.get("video") or {}
     frames_b64 = video.get("frames") or []
     if frames_b64:
+        log.info("  -> using base64 frames")
         chunks: list[torch.Tensor] = []
         for frame_b64 in frames_b64[start:end]:
             chunks.append(_decode_image_b64_inline(frame_b64))
@@ -743,13 +755,17 @@ def load_timeline_segment(timeline: dict, start: int, end: int) -> torch.Tensor:
         or 848
     )
 
+    log.info("  -> resolve_logical_frame_entry for %s frames...", end - start)
     entries = [resolve_logical_frame_entry(timeline, i) for i in range(start, end)]
-    return _decode_timeline_entries(
+    log.info("  -> _decode_timeline_entries...")
+    result = _decode_timeline_entries(
         timeline,
         entries,
         frame_rate=frame_rate,
         default_long_edge=default_long_edge,
     )
+    log.info("  -> load_timeline_segment done, returning %s frames", result.shape[0])
+    return result
 
 
 def _decode_image_b64_inline(b64_str: str) -> torch.Tensor:
