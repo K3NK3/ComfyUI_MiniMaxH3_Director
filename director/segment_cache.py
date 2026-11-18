@@ -122,6 +122,17 @@ def source_identity_changed(stored: Any, expected: dict[str, Any]) -> bool:
     return stored.get(SOURCE_VIDEO_FP_KEY) != exp
 
 
+def task_type_changed(stored: Any, expected: dict[str, Any]) -> bool:
+    """True when the segment's task type (i2v/t2v/v2v/etc.) has changed since caching."""
+    if not isinstance(stored, dict):
+        return True
+    stored_task = stored.get("task_key")
+    expected_task = expected.get("task_key")
+    if stored_task is None or expected_task is None:
+        return True
+    return stored_task != expected_task
+
+
 def _reject_source_stale(
     stored: Any,
     expected: dict[str, Any],
@@ -885,6 +896,15 @@ def _fingerprint_matches(
         expected = segment_cache_fingerprint(seg, plan)
         if stored == expected:
             return True
+        # Task type changes always invalidate cache (i2v → t2v must regenerate)
+        if task_type_changed(stored, expected):
+            log.info(
+                "Segment %d cache has different task type (%s → %s); ignoring stale render.",
+                seg.index + 1,
+                stored.get("task_key", "unknown"),
+                expected.get("task_key", "unknown"),
+            )
+            return False
         if _reject_source_stale(stored, expected, seg_index=seg.index, quiet=True):
             return False
         return bool(allow_stale and _frames_exist(root, seg.index, first_pass=False))
@@ -921,6 +941,15 @@ def load_segment_cache(
         if meta_path.is_file():
             stored = json.loads(meta_path.read_text(encoding="utf-8"))
             if stored != expected:
+                # Task type changes always invalidate cache (i2v → t2v must regenerate)
+                if task_type_changed(stored, expected):
+                    log.info(
+                        "Segment %d cache has different task type (%s → %s); ignoring stale render.",
+                        idx + 1,
+                        stored.get("task_key", "unknown"),
+                        expected.get("task_key", "unknown"),
+                    )
+                    return None
                 if _reject_source_stale(stored, expected, seg_index=idx):
                     return None
                 diff = _fingerprint_diff_keys(stored, expected)
