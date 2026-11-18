@@ -1986,6 +1986,7 @@ def execute_director_plan_core(
             log.info("  -> load_segment_cache (stale)...")
             cached = load_segment_cache(node_id, seg, plan, allow_stale=True)
             used_stale = cached is not None
+        log.info("  -> load_segment_cache returned: %s", "cached" if cached is not None else "None")
         if cached is not None:
             cached = cached.float()
             completed_outputs[seg.index] = cached
