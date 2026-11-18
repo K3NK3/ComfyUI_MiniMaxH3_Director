@@ -1979,9 +1979,11 @@ def execute_director_plan_core(
         # Prefer exact cache; pipeline-stale disk render is ok. A different
         # source video is rejected so v2v/rv2v can passthrough the new clip.
         log.info("Loading cache for unselected segment %d...", seg.index + 1)
+        log.info("  -> load_segment_cache (exact)...")
         cached = load_segment_cache(node_id, seg, plan)
         used_stale = False
         if cached is None:
+            log.info("  -> load_segment_cache (stale)...")
             cached = load_segment_cache(node_id, seg, plan, allow_stale=True)
             used_stale = cached is not None
         if cached is not None:
@@ -1991,6 +1993,7 @@ def execute_director_plan_core(
             #「选择运行」re-roll previews merge all-first-pass frames instead of
             # mixing fresh 一采 with cached 二采. Falls back to the final render
             # when no first-pass cache exists (e.g. refine was never connected).
+            log.info("  -> load_first_pass_frames_stale...")
             pre_fill = load_first_pass_frames_stale(
                 node_id, seg, plan, match_len=int(cached.shape[0])
             )
@@ -1998,27 +2001,32 @@ def execute_director_plan_core(
                 pre_fill if pre_fill is not None else cached
             )
             completed_pre_face[seg.index] = cached
+            log.info("  -> load_segment_audio...")
             cached_audio = load_segment_audio(
                 node_id, seg, plan, allow_stale=used_stale
             )
             if cached_audio is not None:
                 completed_audios[seg.index] = cached_audio
             # Continuity for later sampled segments may need AV latent / handoff.
+            log.info("  -> load_segment_av_latent...")
             cached_av = load_segment_av_latent(
                 node_id, seg, plan, allow_stale=used_stale
             )
             if cached_av is not None:
                 completed_av_latents[seg.index] = cached_av
+            log.info("  -> load_first_pass_av_latent...")
             cached_first = load_first_pass_av_latent(
                 node_id, seg, plan, allow_stale=True
             )
             if cached_first is not None:
                 completed_first_pass_av[seg.index] = cached_first
+            log.info("  -> load_first_pass_low_carry...")
             cached_low = load_first_pass_low_carry(
                 node_id, seg, plan, allow_stale=True
             )
             if cached_low is not None:
                 completed_low_carry[seg.index] = cached_low
+            log.info("  -> load_segment_handoff_meta...")
             cached_handoff = load_segment_handoff_meta(
                 node_id, seg, plan, allow_stale=used_stale
             )
