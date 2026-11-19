@@ -579,11 +579,15 @@ def save_segment_cache(
       - False: write ``audio`` when present, otherwise **keep** existing audio.pt
         (phase-align trim re-save must not wipe a prior audio cache).
     """
+    log.info("save_segment_cache called for segment %d", seg.index + 1)
     if not node_id:
+        log.info("  -> no node_id, returning")
         return
     root = _cache_root(node_id)
     if root is None:
+        log.info("  -> no cache root, returning")
         return
+    log.info("  -> cache root: %s", root)
     fp = segment_cache_fingerprint(seg, plan)
     idx = seg.index
     meta_path = root / f"seg_{idx:04d}.meta.json"
