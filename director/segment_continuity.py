@@ -403,13 +403,17 @@ def resolve_prev_segment_output(
     if prev_idx < 0:
         return None
     if prev_idx in completed:
+        log.info("resolve_prev_segment_output: using in-memory output for segment %d", prev_idx + 1)
         return completed[prev_idx]
     prev_seg = all_segments[prev_idx]
     # Pipeline-stale is ok; a different source video is not (load_segment_cache
     # refuses source-stale even with allow_stale=True).
+    log.info("resolve_prev_segment_output: loading cache for segment %d...", prev_idx + 1)
     cached = load_segment_cache(node_id, prev_seg, plan, allow_stale=True)
     if cached is not None:
+        log.info("resolve_prev_segment_output: loaded cache for segment %d (%s frames)", prev_idx + 1, cached.shape[0])
         return cached
+    log.info("resolve_prev_segment_output: no cache found for segment %d", prev_idx + 1)
     if not plan.continuity_enabled:
         return None
     raise ValueError(
