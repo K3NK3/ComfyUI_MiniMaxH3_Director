@@ -1015,6 +1015,24 @@ def execute_director_plan_core(
             plan, seg, clip_frames=clip_frames, ctx_w=ctx_w, ctx_h=ctx_h, prev_tail=None,
         )
 
+        # In last_frame mode with i2v, force the previous segment's last frame
+        # as the input image (override any user-provided image). This ensures
+        # true continuation from the last frame regardless of loader inputs.
+        if is_last_frame_mode(plan) and seg.task_key == "i2v" and continuity_active:
+            if prev_tail is not None and int(prev_tail.shape[0]) > 0:
+                first_frame = prev_tail[-1:].clone()
+                log.info("last_frame mode i2v: forced previous segment last frame as input image")
+            elif prev_av is not None:
+                # Extract last frame from previous AV latent
+                from .h3_motion_context import video_from_latent
+                prev_video = video_from_latent(prev_av)
+                if int(prev_video.shape[2]) > 0:
+                    last_latent_frame = prev_video[:, :, -1:].clone()
+                    # Decode to pixel space for i2v input
+                    decoded = vae.decode(last_latent_frame)
+                    first_frame = decoded[:1]
+                    log.info("last_frame mode i2v: forced previous segment last frame (decoded from latent)")
+
         # i2v with an explicit new start image = fresh anchor (skip motion context).
         # fl2v keeps last_frame when continuity is on; first_frame yields to context head.
         # r2v/v2v/rv2v: always eligible for MC when continuity_active (refs stay).

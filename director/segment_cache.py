@@ -192,22 +192,21 @@ def resolve_segment_cache_key(cache_name: Any, node_id: Any) -> str:
     """Disk cache directory name.
 
     ``cache_name`` (the Director's "缓存文件夹名" widget) wins when it normalises to
-    something usable; otherwise fall back to a unique per-run key so that runs
-    without an explicit cache folder don't mix segment caches across executions.
+    something usable; otherwise fall back to a stable key based on the node id so
+    that 「选择运行」(select-to-run) and segment continuity can reuse cached
+    segment outputs across executions. A unique per-run key would make each run
+    independent and break partial re-runs, which is not what users expect.
     """
     name = normalize_cache_name(cache_name)
     if name:
         return name
-    # No explicit cache folder: use a unique key per run to avoid mixing
-    # segment caches from different executions. This makes each run independent
-    # when no cache folder is specified, which is the expected behavior for most users.
     try:
         node_part = str(node_id or "").strip()
     except Exception:
         node_part = ""
     if node_part:
-        return f"{node_part}_{uuid.uuid4().hex[:8]}"
-    return f"run_{uuid.uuid4().hex[:8]}"
+        return node_part
+    return "run_default"
 
 
 def _sanitize_dir_token(token: Any) -> str:
