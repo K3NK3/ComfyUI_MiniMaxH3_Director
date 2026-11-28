@@ -205,6 +205,16 @@ class MiniMaxH3Director:
                         "tooltip": "Prepend this text to the global prompt. Useful for adding style descriptors or context that should apply to all segments.",
                     },
                 ),
+                "vsr": (
+                    "MMX_DIR_VSR",
+                    {
+                        "tooltip": (
+                            "可选 RelayVSR。不接时和以前一样。"
+                            "接上后，在一采、二采、修脸都完成以后，对成片再做一次视频放大采样。"
+                            "有二采就在二采后面，有修脸就在修脸后面。音频和帧数不变。"
+                        ),
+                    },
+                ),
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -242,6 +252,12 @@ class MiniMaxH3Director:
                 return (
                     "face_refine: expected MiniMax H3 Director FaceRefine "
                     f"(MMX_DIR_FACE_REFINE), linked node returns {got_face}."
+                )
+            got_vsr = input_types.get("vsr")
+            if got_vsr is not None and got_vsr != "MMX_DIR_VSR":
+                return (
+                    "vsr: expected MiniMax H3 Director RelayVSR "
+                    f"(MMX_DIR_VSR), linked node returns {got_vsr}."
                 )
         return True
 
@@ -289,7 +305,8 @@ class MiniMaxH3Director:
         "Optional selflift accepts MiniMax H3 Director SelfLift "
         "(progressive first-pass on this canvas). Optional refine accepts MiniMax H3 Director Refine "
         "(second sample / upscale). Optional face_refine accepts MiniMax H3 Director FaceRefine "
-        "(crop / re-sample / stitch). images_pre_refine is the first-pass video before refine. "
+        "(crop / re-sample / stitch). Optional vsr accepts MiniMax H3 Director RelayVSR "
+        "(upscale after refine and face refine). images_pre_refine is the first-pass video before refine. "
         "images_pre_face_refine is the video before face stitch "
         "(blocked unless FaceRefine is connected and「输出修脸前」is on). "
         "Defaults: 0.4MP 16:9 (864×480), 5s / 124 frames @ 24 fps."
@@ -317,6 +334,7 @@ class MiniMaxH3Director:
         refine=None,
         face_refine=None,
         sigmas=None,
+        vsr=None,
         steps=25,
         sampler="res_multistep",
         scheduler="simple",
@@ -327,6 +345,7 @@ class MiniMaxH3Director:
         clear_vram_between_segments=True,
         clear_vram_before_refine=False,
         clear_vram_before_face_refine=False,
+        clear_vram_before_decode=False,
         cache_frames_codec="raw",
         export_source_images=False,
         export_pre_face_refine=False,
@@ -363,6 +382,7 @@ class MiniMaxH3Director:
             face_refine=face_refine,
             global_cond=global_cond,
             global_prompt_prepend=global_prompt_prepend,
+            vsr=vsr,
         )
         codec = str(cache_frames_codec or "raw").strip().lower()
         plan.cache_frames_codec = "ffv1" if codec == "ffv1" else "raw"
@@ -388,6 +408,7 @@ class MiniMaxH3Director:
                     clear_vram_between_segments=clear_vram_between_segments,
                     clear_vram_before_refine=clear_vram_before_refine,
                     clear_vram_before_face_refine=clear_vram_before_face_refine,
+                    clear_vram_before_decode=clear_vram_before_decode,
                     export_pre_face_refine=export_pre_face_refine,
                     clear_ram_between_segments=clear_ram_between_segments,
                     offload_segments_to_disk=offload_segments_to_disk,

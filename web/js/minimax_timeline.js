@@ -538,6 +538,7 @@ const DIRECTOR_WIDGET_LABEL_KEYS = {
     save_group_videos: "widget.saveGroupVideos",
     rerun_when_done: "widget.rerunWhenDone",
     rerun_after_seconds: "widget.rerunAfterSeconds",
+    clear_vram_before_decode: "widget.clearVramBeforeDecode",
     cache_frames_codec: "widget.cacheFramesCodec",
     cache_name: "widget.cacheName",
     export_source_images: "widget.exportSourceImages",
@@ -555,6 +556,7 @@ const DIRECTOR_WIDGET_TOOLTIP_KEYS = {
     save_group_videos: "widget.tooltip.saveGroupVideos",
     rerun_when_done: "widget.tooltip.rerunWhenDone",
     rerun_after_seconds: "widget.tooltip.rerunAfterSeconds",
+    clear_vram_before_decode: "widget.tooltip.clearVramBeforeDecode",
     cache_frames_codec: "widget.tooltip.cacheFramesCodec",
     cache_name: "widget.tooltip.cacheName",
     export_source_images: "widget.tooltip.exportSourceImages",
@@ -1780,6 +1782,7 @@ const PERF_WIDGET_ORDER = [
     // configure 阶段按位置塞 widgets_values 时会整体错位一位 —— 实测它抢到了
     // BDGROUP「性能」的值。
     "cache_name",
+    "clear_vram_before_decode",
 ];
 
 function moveDirectorPerfWidgetsBeforeTimeline(node) {
@@ -4513,9 +4516,12 @@ class MiniMaxH3DirectorEditor {
         // re-shows it on top of the green progress title.
         const running = !!this.runStatusEl?.classList.contains("active");
         this.runSelectBar?.classList.toggle("hidden", !enabled || running);
+        this.batchDelSelectedBtn?.classList.toggle("hidden", !enabled);
+        if (this.batchDelSelectedBtn) this.batchDelSelectedBtn.disabled = true;
         if (!canRunSelect) return;
         this.normalizeRunSelection();
         const count = (this.timeline.runSelection || []).length;
+        if (this.batchDelSelectedBtn) this.batchDelSelectedBtn.disabled = running || !count;
         const syncAllCb = (cb) => {
             if (!cb) return;
             cb.checked = count >= n && n > 0;
@@ -10290,6 +10296,39 @@ class MiniMaxH3DirectorEditor {
         }
 
         this.commit(false, { syncTimeline: true });
+    }
+
+    /** 「选择运行」mode batch delete: remove every checked group/segment at once. */
+    deleteCheckedSegments() {
+        if (!this.isRunSelectEnabled?.()) return;
+        if (this.hasExternalI2vGroups?.() || this.hasExternalR2vGroups?.()) return;
+        const n = this.getRunnableSegmentCount();
+        const indices = [...(this.timeline.runSelection || [])]
+            .filter((i) => Number.isInteger(i) && i >= 0 && i < n)
+            .sort((a, b) => a - b);
+        if (!indices.length) { window.alert(t("batch.deleteCheckedNone")); return; }
+        // Full selection is allowed: every mode's single-delete path refuses to
+        // remove the last remaining group/segment, so exactly the first one stays.
+        const prevSel = this.selectedIndex;
+        // Descending so each removal does not shift the still-pending indices.
+        for (let k = indices.length - 1; k >= 0; k--) {
+            const idx = indices[k];
+            if (idx >= this.getRunnableSegmentCount()) continue;
+            this.selectedIndex = idx;
+            this.deleteSelectedSegment();
+        }
+        this.selectedIndex = clamp(prevSel ?? 0, 0, Math.max(0, this.getRunnableSegmentCount() - 1));
+        // Deleted entries were exactly the checked ones: re-arm a full selection
+        // so stale shifted indices never point at the wrong group.
+        if (this.isRunSelectEnabled()) {
+            this.timeline.runSelection = this.isFl2vMode()
+                ? fl2vStartIndices(this)
+                : Array.from({ length: this.getRunnableSegmentCount() }, (_, i) => i);
+        }
+        this.commit(false, { syncTimeline: true });
+        this.updateRunSelectUI();
+        if (this.isImageBatch()) this.renderImageBatchGroups?.();
+        else this.scheduleRender?.();
     }
 
     compactSegmentsAfterDelete() {

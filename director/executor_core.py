@@ -102,7 +102,7 @@ from .segment_continuity import (
 )
 from .segment_loras import apply_segment_loras, describe_lora_rows
 from .ram_cleanup import system_ram_cleanup
-from .vram_cleanup import cleanup_segment_vram
+from .vram_cleanup import cleanup_before_decode, cleanup_segment_vram
 
 log = logging.getLogger("ComfyUI-MiniMaxH3-Director.director.core")
 
@@ -554,6 +554,7 @@ def execute_director_plan_core(
     clear_vram_between_segments: bool = True,
     clear_vram_before_refine: bool = False,
     clear_vram_before_face_refine: bool = False,
+    clear_vram_before_decode: bool = False,
     export_pre_face_refine: bool = False,
     clear_ram_between_segments: bool = False,
     offload_segments_to_disk: bool = False,
@@ -666,6 +667,14 @@ def execute_director_plan_core(
         reports.append("VRAM: 二采前清理显存已开启（一采结束后、二采开始前卸载模型）。")
     if clear_vram_before_face_refine:
         reports.append("VRAM: 脸修前清理显存已开启（解码后、FaceRefine 开始前卸载模型）。")
+    if clear_vram_before_decode:
+        reports.append(
+            "VRAM: 解码前清理显存已开启（采样结束后只卸载 DiT，文本编码器与 VAE 保持驻留）。"
+        )
+    from .relay_vsr.pack import relay_vsr_enabled, relay_vsr_report_line
+
+    if relay_vsr_enabled(plan):
+        reports.append(relay_vsr_report_line(plan) or "RelayVSR: on")
     if export_pre_face_refine:
         extra = (
             "；分段导出另存 seg_XXXX_facepre.mp4"
@@ -1675,6 +1684,23 @@ def execute_director_plan_core(
             first_pass_gpu = None
         sample_s = time.perf_counter() - t_sample
 
+        # 采样 → 解码之间缺一个显存交接点：AV latent 已经算完，DiT 权重不再参与
+        # 解码，但它仍驻留显存，解码时就和 VAE 的解码张量抢空间，动态显存反复
+        # 换页，GPU 长时间空转（12GB 卡实测解码 400s+，同一 VAE 单独解码仅 55s）。
+        # 这里只卸载 DiT，文本编码器与视频/音频 VAE 保持驻留，下一段复用。
+        if clear_vram_before_decode:
+            t_clean = time.perf_counter()
+            freed_gb = cleanup_before_decode(enabled=True)
+            clean_s = time.perf_counter() - t_clean
+            log.info(
+                "Segment %s/%s: pre-decode VRAM cleanup done in %.1fs (freed %.2f GiB)",
+                ui_idx + 1, timeline_seg_total, clean_s, freed_gb,
+            )
+            reports.append(
+                f"Segment {ui_idx + 1}/{timeline_seg_total}: "
+                f"VRAM cleanup before decode (DiT unloaded, VAE kept, {clean_s:.1f}s)"
+            )
+
         report_director_progress(
             progress_node_id, segment_index=progress_index, segment_total=seg_total,
             phase="decode", phase_value=0, phase_max=1, **meta,
@@ -1820,6 +1846,17 @@ def execute_director_plan_core(
             )
             if not run_refine:
                 pre_chunk = chunk
+        if relay_vsr_enabled(plan) and not hold_after_first:
+            cleanup_segment_vram(enabled=True, unload_models=True)
+            from .relay_vsr.sample import apply_segment_relay_vsr
+
+            t_vsr = time.perf_counter()
+            chunk = apply_segment_relay_vsr(chunk, plan.vsr)
+            vsr_s = time.perf_counter() - t_vsr
+            reports.append(
+                f"Segment {ui_idx + 1}/{timeline_seg_total}: "
+                f"RelayVSR {int(chunk.shape[2])}x{int(chunk.shape[1])} ({vsr_s:.1f}s)"
+            )
         handoff = {
             "trim_frames": int(trim_frames),
             "export_frames": int(chunk.shape[0]),
